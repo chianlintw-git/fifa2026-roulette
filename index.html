@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>2026世界盃足球輪盤盟主賽</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div class="auth-page">
+  <div class="auth-card">
+
+    <!-- Logo -->
+    <div class="auth-logo">
+      <div class="icon">⚽</div>
+      <h1>2026世界盃足球輪盤盟主賽</h1>
+      <p>登入後開始押隊，競爭盟主寶座！</p>
+    </div>
+
+    <!-- 提示訊息 -->
+    <div id="msg" style="display:none"></div>
+
+    <!-- 登入表單 -->
+    <div id="form-login">
+      <div class="form-group">
+        <label class="form-label">電子郵件</label>
+        <input type="email" id="login-email" class="form-control" placeholder="your@email.com">
+      </div>
+      <div class="form-group">
+        <label class="form-label">密碼</label>
+        <input type="password" id="login-password" class="form-control" placeholder="請輸入密碼">
+      </div>
+      <button class="btn btn-primary" style="width:100%" onclick="doLogin()">登入</button>
+      <p style="text-align:center; margin-top:14px; font-size:13px; color:var(--text-sub)">
+        還沒有帳號？
+        <a href="#" onclick="showRegister()" style="color:var(--primary)">立即註冊</a>
+      </p>
+    </div>
+
+    <!-- 註冊表單 -->
+    <div id="form-register" style="display:none">
+      <div class="form-group">
+        <label class="form-label">電子郵件 <span style="color:#E24B4A">*</span></label>
+        <input type="email" id="reg-email" class="form-control" placeholder="your@email.com">
+      </div>
+      <div class="form-group">
+        <label class="form-label">暱稱 <span style="color:#E24B4A">*</span></label>
+        <input type="text" id="reg-nickname" class="form-control" placeholder="顯示在排行榜的名稱">
+      </div>
+      <div class="form-group">
+        <label class="form-label">密碼 <span style="color:#E24B4A">*</span></label>
+        <input type="password" id="reg-password" class="form-control" placeholder="至少 6 個字元">
+      </div>
+      <div class="form-group">
+        <label class="form-label">確認密碼 <span style="color:#E24B4A">*</span></label>
+        <input type="password" id="reg-password2" class="form-control" placeholder="再輸入一次密碼">
+      </div>
+      <button class="btn btn-teal" style="width:100%" onclick="doRegister()">送出註冊申請</button>
+      <p style="text-align:center; margin-top:14px; font-size:13px; color:var(--text-sub)">
+        已有帳號？
+        <a href="#" onclick="showLogin()" style="color:var(--primary)">返回登入</a>
+      </p>
+    </div>
+
+    <!-- 待審核提示 -->
+    <div id="form-pending" style="display:none">
+      <div class="alert alert-info" style="text-align:center; margin-bottom:0">
+        <p style="font-size:15px; margin-bottom:6px">⏳ 註冊申請已送出</p>
+        <p style="font-size:13px">請等待管理員審核通過後，即可登入使用。</p>
+      </div>
+      <p style="text-align:center; margin-top:14px; font-size:13px; color:var(--text-sub)">
+        <a href="#" onclick="showLogin()" style="color:var(--primary)">返回登入</a>
+      </p>
+    </div>
+
+  </div>
+</div>
+
+<script type="module">
+import { auth, db } from "./js/firebase-config.js";
+import {
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  onAuthStateChanged
+} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+import {
+  doc, setDoc, getDoc, serverTimestamp
+} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+// 已登入則直接跳轉
+onAuthStateChanged(auth, async (user) => {
+  if (user) {
+    const snap = await getDoc(doc(db, "users", user.uid));
+    if (snap.exists() && snap.data().isApproved) {
+      window.location.href = "main.html";
+    } else if (snap.exists() && !snap.data().isApproved) {
+      showMsg("warning", "帳號尚未通過審核，請等待管理員確認。");
+    }
+  }
+});
+
+// 顯示提示訊息
+function showMsg(type, text) {
+  const el = document.getElementById("msg");
+  el.className = `alert alert-${type}`;
+  el.textContent = text;
+  el.style.display = "block";
+}
+
+// 切換表單
+window.showLogin = () => {
+  document.getElementById("form-login").style.display = "block";
+  document.getElementById("form-register").style.display = "none";
+  document.getElementById("form-pending").style.display = "none";
+  document.getElementById("msg").style.display = "none";
+};
+window.showRegister = () => {
+  document.getElementById("form-login").style.display = "none";
+  document.getElementById("form-register").style.display = "block";
+  document.getElementById("form-pending").style.display = "none";
+  document.getElementById("msg").style.display = "none";
+};
+
+// 登入
+window.doLogin = async () => {
+  const email    = document.getElementById("login-email").value.trim();
+  const password = document.getElementById("login-password").value;
+
+  if (!email || !password) {
+    showMsg("danger", "請填寫電子郵件及密碼。"); return;
+  }
+  try {
+    const cred = await signInWithEmailAndPassword(auth, email, password);
+    const snap = await getDoc(doc(db, "users", cred.user.uid));
+    if (!snap.exists()) {
+      showMsg("danger", "找不到使用者資料，請聯絡管理員。"); return;
+    }
+    if (!snap.data().isApproved) {
+      showMsg("warning", "帳號尚未通過審核，請等待管理員確認。"); return;
+    }
+    window.location.href = "main.html";
+  } catch (e) {
+    if (e.code === "auth/invalid-credential" || e.code === "auth/wrong-password") {
+      showMsg("danger", "電子郵件或密碼錯誤，請重新確認。");
+    } else if (e.code === "auth/user-not-found") {
+      showMsg("danger", "此電子郵件尚未註冊。");
+    } else if (e.code === "auth/too-many-requests") {
+      showMsg("danger", "登入失敗次數過多，請稍後再試。");
+    } else {
+      showMsg("danger", "登入失敗：" + e.message);
+    }
+  }
+};
+
+// 註冊
+window.doRegister = async () => {
+  const email    = document.getElementById("reg-email").value.trim();
+  const nickname = document.getElementById("reg-nickname").value.trim();
+  const password = document.getElementById("reg-password").value;
+  const password2= document.getElementById("reg-password2").value;
+
+  if (!email || !nickname || !password || !password2) {
+    showMsg("danger", "請填寫所有必填欄位。"); return;
+  }
+  if (password.length < 6) {
+    showMsg("danger", "密碼至少需要 6 個字元。"); return;
+  }
+  if (password !== password2) {
+    showMsg("danger", "兩次輸入的密碼不一致。"); return;
+  }
+  try {
+    const cred = await createUserWithEmailAndPassword(auth, email, password);
+    await setDoc(doc(db, "users", cred.user.uid), {
+      uid:        cred.user.uid,
+      email:      email,
+      nickname:   nickname,
+      isAdmin:    false,
+      userType:   "player",
+      isApproved: false,
+      createdAt:  serverTimestamp()
+    });
+    // 登出，等待審核
+    await auth.signOut();
+    document.getElementById("form-register").style.display = "none";
+    document.getElementById("form-pending").style.display = "block";
+    document.getElementById("msg").style.display = "none";
+  } catch (e) {
+    if (e.code === "auth/email-already-in-use") {
+      showMsg("danger", "此電子郵件已被註冊，請直接登入。");
+    } else if (e.code === "auth/invalid-email") {
+      showMsg("danger", "電子郵件格式不正確。");
+    } else {
+      showMsg("danger", "註冊失敗：" + e.message);
+    }
+  }
+};
+</script>
+
+</body>
+</html>
