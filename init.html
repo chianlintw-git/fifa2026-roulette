@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Firestore 初始化工具</title>
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    .init-page { max-width: 640px; margin: 40px auto; padding: 0 16px; }
+    .log-box {
+      background: #1e1e1e; color: #d4d4d4;
+      font-family: monospace; font-size: 12px;
+      padding: 16px; border-radius: 8px;
+      height: 320px; overflow-y: auto;
+      margin-top: 16px; line-height: 1.7;
+    }
+    .log-ok   { color: #4ec9b0; }
+    .log-err  { color: #f48771; }
+    .log-info { color: #9cdcfe; }
+    .log-warn { color: #dcdcaa; }
+    .step-list { list-style: none; margin: 0 0 16px; padding: 0; }
+    .step-list li {
+      padding: 8px 12px; border-radius: 6px;
+      background: var(--bg2); border: 1px solid var(--border);
+      margin-bottom: 6px; font-size: 13px; color: var(--text-sub);
+      display: flex; align-items: center; gap: 8px;
+    }
+    .step-list li .num {
+      width: 22px; height: 22px; border-radius: 50%;
+      background: var(--primary); color: #fff;
+      font-size: 11px; font-weight: 500;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+  </style>
+</head>
+<body>
+<div class="init-page">
+
+  <div class="card">
+    <div class="card-title">⚙️ Firestore 資料初始化工具</div>
+    <div class="alert alert-warning">
+      ⚠️ 此頁面僅供初始化使用，完成後請從 GitHub 刪除此檔案。
+    </div>
+
+    <p style="font-size:13px; color:var(--text-sub); margin-bottom:14px">
+      按下按鈕後，系統將自動建立以下資料：
+    </p>
+    <ul class="step-list">
+      <li><span class="num">1</span> rounds（第0~5輪封盤設定，預設 open）</li>
+      <li><span class="num">2</span> teams（48支隊伍完整資料）</li>
+      <li><span class="num">3</span> results（第0~5輪空白結果文件）</li>
+    </ul>
+
+    <div style="display:flex; gap:10px; flex-wrap:wrap">
+      <button class="btn btn-primary" id="btn-init" onclick="runInit()">
+        開始初始化
+      </button>
+      <button class="btn btn-outline" onclick="checkData()">
+        檢查現有資料
+      </button>
+    </div>
+
+    <div class="log-box" id="log">
+      <span class="log-info">▶ 等待執行...</span>
+    </div>
+  </div>
+
+</div>
+
+<script type="module">
+import { auth, db } from "./js/firebase-config.js";
+import { TEAMS, GROUPS } from "./js/teams-data.js";
+import {
+  doc, setDoc, getDoc, collection,
+  getDocs, serverTimestamp, writeBatch
+} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+const ROUND_LABELS = [
+  "小組賽", "32強淘汰賽", "16強淘汰賽",
+  "8強淘汰賽", "4強淘汰賽", "冠軍決賽"
+];
+const ROUND_MULTIPLIERS = [0, 1, 2, 3, 4, 5];
+
+function log(msg, type = "info") {
+  const box = document.getElementById("log");
+  box.innerHTML += `\n<span class="log-${type}">${msg}</span>`;
+  box.scrollTop = box.scrollHeight;
+}
+
+// ===== 初始化 =====
+window.runInit = async () => {
+  const btn = document.getElementById("btn-init");
+  btn.disabled = true;
+  btn.textContent = "初始化中...";
+  document.getElementById("log").innerHTML = "";
+
+  try {
+    // 1. rounds
+    log("【1/3】建立 rounds collection...", "info");
+    const batch1 = writeBatch(db);
+    for (let i = 0; i <= 5; i++) {
+      const ref = doc(db, "rounds", String(i));
+      batch1.set(ref, {
+        round:      i,
+        label:      ROUND_LABELS[i],
+        status:     "open",
+        dueDate:    new Date("2026-12-31T23:59:59+08:00"),
+        multiplier: ROUND_MULTIPLIERS[i]
+      });
+    }
+    await batch1.commit();
+    log("  ✓ rounds 0~5 建立完成", "ok");
+
+    // 2. teams（分批寫入，每批最多 500 筆，這裡 48 筆一次搞定）
+    log("【2/3】建立 teams collection（48隊）...", "info");
+    const batch2 = writeBatch(db);
+    for (const team of TEAMS) {
+      const ref = doc(db, "teams", team.teamId);
+      batch2.set(ref, team);
+    }
+    await batch2.commit();
+    log(`  ✓ ${TEAMS.length} 支隊伍建立完成`, "ok");
+
+    // 3. results（空白文件，含 matchups 空陣列）
+    log("【3/3】建立 results collection...", "info");
+    const batch3 = writeBatch(db);
+    for (let i = 0; i <= 5; i++) {
+      const ref = doc(db, "results", String(i));
+      batch3.set(ref, {
+        round:         i,
+        advancedTeams: [],
+        matchups:      [],
+        updatedAt:     null
+      });
+    }
+    await batch3.commit();
+    log("  ✓ results 0~5 建立完成", "ok");
+
+    log("", "info");
+    log("✅ 初始化完成！所有資料已寫入 Firestore。", "ok");
+    log("   請至 Firebase Console 確認資料，", "warn");
+    log("   完成後記得從 GitHub 刪除此 init.html 檔案。", "warn");
+
+  } catch (e) {
+    log("❌ 初始化失敗：" + e.message, "err");
+    log("   請確認 firebase-config.js 設定正確，", "err");
+    log("   且 Firestore 已開啟（測試模式）。", "err");
+  }
+
+  btn.disabled = false;
+  btn.textContent = "重新初始化";
+};
+
+// ===== 檢查現有資料 =====
+window.checkData = async () => {
+  document.getElementById("log").innerHTML = "";
+  log("【檢查現有資料】", "info");
+  try {
+    // rounds
+    const rSnap = await getDocs(collection(db, "rounds"));
+    log(`  rounds：${rSnap.size} 筆 ${rSnap.size === 6 ? "✓" : "（預期 6 筆）"}`,
+        rSnap.size === 6 ? "ok" : "warn");
+
+    // teams
+    const tSnap = await getDocs(collection(db, "teams"));
+    log(`  teams：${tSnap.size} 筆 ${tSnap.size === 48 ? "✓" : "（預期 48 筆）"}`,
+        tSnap.size === 48 ? "ok" : "warn");
+
+    // results
+    const rsSnap = await getDocs(collection(db, "results"));
+    log(`  results：${rsSnap.size} 筆 ${rsSnap.size === 6 ? "✓" : "（預期 6 筆）"}`,
+        rsSnap.size === 6 ? "ok" : "warn");
+
+    // users
+    const uSnap = await getDocs(collection(db, "users"));
+    log(`  users：${uSnap.size} 筆（已註冊人數）`, "info");
+
+    log("", "info");
+    log("檢查完成。", "ok");
+  } catch (e) {
+    log("❌ 檢查失敗：" + e.message, "err");
+  }
+};
+</script>
+</body>
+</html>
