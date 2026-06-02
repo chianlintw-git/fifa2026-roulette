@@ -403,8 +403,11 @@ window.toggleTeam0 = (teamId) => {
   if (selected.has(teamId)) {
     selected.delete(teamId);
   } else {
+    if (selected.size >= 32) {
+      setStatus("❌ 已達 32 隊上限，請先取消其他隊伍再選擇。", "err"); return;
+    }
     if (groupCnt >= 3) {
-      setStatus("每組最多選 3 隊，請先取消同組的選擇。", "err"); return;
+      setStatus("❌ 每組最多選 3 隊，請先取消同組的選擇。", "err"); return;
     }
     selected.add(teamId);
   }
