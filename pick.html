@@ -17,17 +17,23 @@
     .round-tab.closed { background: var(--bg2); color: var(--gray-400); cursor: default; }
     .round-tab.closed:hover { border-color: var(--border); color: var(--gray-400); }
 
-    .group-section { margin-bottom: 20px; }
+    .group-section { margin-bottom: 14px; }
     .group-header {
       font-size: 13px; font-weight: 500; color: var(--text-sub);
       padding: 6px 10px; background: var(--bg2);
       border-radius: var(--radius); margin-bottom: 8px;
       display: flex; align-items: center; justify-content: space-between;
     }
-    .group-counter { font-size: 12px; }
+    .group-counter { font-size: 12px; font-weight:500; }
     .group-counter.ok    { color: var(--teal); }
     .group-counter.over  { color: var(--coral); }
     .group-counter.under { color: var(--amber); }
+
+    /* checkbox 唯讀：只能透過卡片點擊 */
+    .team-card input[type="checkbox"] {
+      pointer-events: none;
+      accent-color: var(--primary);
+    }
 
     .matchup-card {
       border: 1.5px solid var(--border); border-radius: var(--radius);
@@ -48,15 +54,10 @@
     .matchup-team:hover { background: var(--primary-light); }
     .matchup-team.selected { background: var(--primary-light); }
     .matchup-team.selected .team-name-cht { color: var(--primary-dark); font-weight:500; }
-    .matchup-team input[type="radio"] { accent-color: var(--primary); }
-
-    .third-place-section {
-      border: 1.5px dashed var(--border); border-radius: var(--radius);
-      padding: 14px; margin-top: 8px;
-    }
-    .third-counter {
-      font-size: 13px; font-weight:500; margin-bottom:10px;
-      display: flex; align-items:center; gap:8px;
+    /* radio 唯讀 */
+    .matchup-team input[type="radio"] {
+      pointer-events: none;
+      accent-color: var(--primary);
     }
 
     .sticky-footer {
@@ -69,8 +70,24 @@
       z-index: 50;
     }
     .save-status { font-size: 13px; color: var(--text-sub); }
-    .save-status.ok   { color: var(--teal); }
-    .save-status.err  { color: var(--coral); }
+    .save-status.ok  { color: var(--teal); }
+    .save-status.err { color: var(--coral); }
+
+    /* 總計進度條 */
+    .total-progress {
+      display: flex; align-items: center; gap: 10px;
+      font-size: 13px; color: var(--text-sub);
+    }
+    .progress-bar-wrap {
+      width: 120px; height: 6px; background: var(--border);
+      border-radius: 10px; overflow: hidden;
+    }
+    .progress-bar {
+      height: 100%; background: var(--primary);
+      border-radius: 10px; transition: width .2s;
+    }
+    .progress-bar.done { background: var(--teal); }
+    .progress-bar.over { background: var(--coral); }
   </style>
 </head>
 <body>
@@ -107,7 +124,15 @@
 
 <!-- 底部儲存列 -->
 <div class="sticky-footer" id="sticky-footer" style="display:none">
-  <span class="save-status" id="save-status"></span>
+  <div style="display:flex; flex-direction:column; gap:4px">
+    <div class="total-progress" id="total-progress" style="display:none">
+      <span id="total-label">已選 0 / 32 隊</span>
+      <div class="progress-bar-wrap">
+        <div class="progress-bar" id="progress-bar" style="width:0%"></div>
+      </div>
+    </div>
+    <span class="save-status" id="save-status"></span>
+  </div>
   <button class="btn btn-primary" id="btn-save" onclick="savePicks()">
     ✓ 確定送出
   </button>
@@ -126,8 +151,8 @@ import {
 
 let currentUser  = null;
 let currentRound = 0;
-let rounds       = [];   // rounds collection 資料
-let myPicks      = {};   // { "0": [...teamIds], "1": [...], ... }
+let rounds       = [];
+let myPicks      = {};
 let isClosed     = false;
 
 // ─── 認證 ─────────────────────────────────────────────
@@ -147,39 +172,38 @@ window.doLogout = async () => { await signOut(auth); window.location.href = "ind
 
 // ─── 載入全部資料 ──────────────────────────────────────
 async function loadAll() {
-  // 1. 讀取各輪狀態
   const roundsSnap = await getDocs(collection(db, "rounds"));
   rounds = [];
   roundsSnap.forEach(d => rounds.push(d.data()));
   rounds.sort((a,b) => a.round - b.round);
 
-  // 2. 自動封盤判斷（前端時間比對）
+  // 前端封盤判斷
   const now = new Date();
   rounds.forEach(r => {
     const due = r.dueDate?.toDate ? r.dueDate.toDate() : new Date(r.dueDate);
     if (now >= due) r.status = "close";
   });
 
-  // 3. 讀取我的選擇
+  // 讀取我的選擇
   for (let i = 0; i <= 5; i++) {
-    const pickSnap = await getDoc(doc(db, "picks", `${currentUser.uid}_${i}`));
-    myPicks[i] = pickSnap.exists() ? (pickSnap.data().selectedTeams || []) : [];
+    const snap = await getDoc(doc(db, "picks", `${currentUser.uid}_${i}`));
+    myPicks[i] = snap.exists() ? (snap.data().selectedTeams || []) : [];
   }
 
   renderTabs();
   renderRound(currentRound);
 }
 
-// ─── 渲染輪次頁籤 ─────────────────────────────────────
+// ─── 輪次頁籤 ─────────────────────────────────────────
 function renderTabs() {
   const labels = ["小組賽","32強","16強","8強","4強","決賽"];
   const wrap   = document.getElementById("round-tabs");
   wrap.innerHTML = "";
   rounds.forEach(r => {
     const closed = r.status === "close";
-    const btn = document.createElement("div");
-    btn.className = `round-tab ${r.round === currentRound ? "active" : ""} ${closed ? "closed" : ""}`;
-    btn.innerHTML = `第${r.round}輪 ${labels[r.round]} ${closed ? "🔒" : ""}`;
+    const btn    = document.createElement("div");
+    btn.className = `round-tab ${r.round === currentRound ? "active":""} ${closed ? "closed":""}`;
+    btn.innerHTML = `第${r.round}輪 ${labels[r.round]} ${closed ? "🔒":""}`;
     if (!closed) btn.onclick = () => switchRound(r.round);
     else btn.title = "此輪已封盤";
     wrap.appendChild(btn);
@@ -192,30 +216,28 @@ function switchRound(n) {
   renderRound(n);
 }
 
-// ─── 渲染選隊內容 ─────────────────────────────────────
+// ─── 渲染輪次 ─────────────────────────────────────────
 async function renderRound(n) {
   const content = document.getElementById("pick-content");
   const footer  = document.getElementById("sticky-footer");
+  const progress= document.getElementById("total-progress");
   const round   = rounds.find(r => r.round === n);
   isClosed      = round?.status === "close";
 
   if (isClosed) {
-    footer.style.display = "none";
+    footer.style.display   = "none";
+    progress.style.display = "none";
     content.innerHTML = `
       <div class="card">
         <div class="alert alert-warning" style="margin-bottom:0">
           🔒 此輪已封盤，無法修改選擇。
         </div>
         ${myPicks[n]?.length > 0
-          ? `<p style="font-size:13px;color:var(--text-sub);margin-top:12px">
-               你已選擇 ${myPicks[n].length} 支隊伍。
-             </p>`
-          : `<p style="font-size:13px;color:var(--coral);margin-top:12px">
-               ⚠ 封盤前未完成選隊，本輪不計分。
-             </p>`}
+          ? `<p style="font-size:13px;color:var(--text-sub);margin-top:12px">你已選擇 ${myPicks[n].length} 支隊伍。</p>`
+          : `<p style="font-size:13px;color:var(--coral);margin-top:12px">⚠ 封盤前未完成選隊，本輪不計分。</p>`}
       </div>`;
-    if (n === 0) renderRound0View(content);
-    else renderKnockoutView(content, n);
+    if (n === 0) renderPickedView(content, myPicks[0]);
+    else         renderPickedView(content, myPicks[n]);
     return;
   }
 
@@ -223,8 +245,14 @@ async function renderRound(n) {
   document.getElementById("save-status").textContent = "";
   document.getElementById("save-status").className   = "save-status";
 
-  if (n === 0) await renderRound0(content);
-  else         await renderKnockout(content, n);
+  if (n === 0) {
+    progress.style.display = "flex";
+    await renderRound0(content);
+    updateProgress();
+  } else {
+    progress.style.display = "none";
+    await renderKnockout(content, n);
+  }
 }
 
 // ─── 第 0 輪：小組賽 ──────────────────────────────────
@@ -235,29 +263,30 @@ async function renderRound0(content) {
     <div class="card">
       <div class="card-title">🏟 第 0 輪：小組賽選隊</div>
       <div class="alert alert-info">
-        每組選 <strong>2 隊</strong>晉級（共 24 隊），再從各組第三名中選 <strong>8 隊</strong>，合計 32 隊。
+        每組選 <strong>2 或 3 隊</strong>（不可選 1 隊或全選 4 隊），
+        12 組加總必須剛好 <strong>32 隊</strong>。
       </div>
     </div>`;
 
-  // A~L 各組
   GROUPS.forEach(g => {
-    const teams = TEAMS.filter(t => t.group === g);
-    const groupSelected = teams.filter(t => selected.has(t.teamId));
-    const cnt = groupSelected.length;
-    const counterClass = cnt === 2 ? "ok" : cnt > 2 ? "over" : "under";
+    const teams   = TEAMS.filter(t => t.group === g);
+    const cnt     = teams.filter(t => selected.has(t.teamId)).length;
+    const counterClass = cnt === 2 || cnt === 3 ? "ok" : cnt > 3 ? "over" : "under";
+    const counterText  = cnt > 3 ? `${cnt}/2~3 ⚠超過` : `${cnt}/2~3`;
 
-    html += `<div class="group-section">
-      <div class="group-header">
-        <span>🔹 ${g} 組</span>
-        <span class="group-counter ${counterClass}">${cnt}/2 隊</span>
-      </div>
-      <div class="team-grid">`;
+    html += `
+      <div class="group-section">
+        <div class="group-header">
+          <span>🔹 ${g} 組</span>
+          <span class="group-counter ${counterClass}">${counterText}</span>
+        </div>
+        <div class="team-grid">`;
 
     teams.forEach(t => {
       const sel = selected.has(t.teamId);
       html += `
-        <div class="team-card ${sel ? "selected" : ""}" onclick="toggleTeam0('${t.teamId}')">
-          <input type="checkbox" ${sel ? "checked" : ""} onclick="event.stopPropagation()">
+        <div class="team-card ${sel ? "selected":""}" onclick="toggleTeam0('${t.teamId}')">
+          <input type="checkbox" ${sel ? "checked":""}>
           <span class="weighting-dot w${t.weighting}">${t.weighting}</span>
           <div>
             <div class="team-name-cht">${t.nameCht}</div>
@@ -268,44 +297,17 @@ async function renderRound0(content) {
     html += `</div></div>`;
   });
 
-  // 第三名區域
-  const thirdCandidates = TEAMS.filter(t => {
-    // 各組第三名候選（排名第3的隊伍，此處顯示所有隊伍讓使用者自行判斷）
-    const groupTeams = TEAMS.filter(gt => gt.group === t.group);
-    return groupTeams.indexOf(t) === 2; // weighting table 第3筆即第三名候選
-  });
-  const thirdSelected = thirdCandidates.filter(t => selected.has(t.teamId));
-
-  html += `
-    <div class="card">
-      <div class="card-title">🔸 各組第三名選拔（選 8 隊）</div>
-      <div class="alert alert-info" style="margin-bottom:12px">
-        從 12 組第三名中選出 <strong>8 隊</strong>晉級。
-      </div>
-      <div class="third-place-section">
-        <div class="third-counter">
-          已選 <strong id="third-count">${thirdSelected.length}</strong> / 8 隊
-          <span id="third-status" class="${thirdSelected.length === 8 ? "badge badge-teal" : "badge badge-amber"}">
-            ${thirdSelected.length === 8 ? "✓ 完成" : "未完成"}
-          </span>
-        </div>
-        <div class="team-grid">`;
-
-  thirdCandidates.forEach(t => {
-    const sel = selected.has(t.teamId);
-    html += `
-      <div class="team-card ${sel ? "selected" : ""}" onclick="toggleThird('${t.teamId}')">
-        <input type="checkbox" ${sel ? "checked" : ""} onclick="event.stopPropagation()">
-        <span class="weighting-dot w${t.weighting}">${t.weighting}</span>
-        <div>
-          <div class="team-name-cht">${t.nameCht} <small style="color:var(--text-sub)">(${t.group}組)</small></div>
-          <div class="team-name-en">${t.name}</div>
-        </div>
-      </div>`;
-  });
-
-  html += `</div></div></div>`;
   content.innerHTML = html;
+}
+
+// ─── 更新進度條 ───────────────────────────────────────
+function updateProgress() {
+  const total = (myPicks[0] || []).length;
+  const pct   = Math.min(total / 32 * 100, 100);
+  const bar   = document.getElementById("progress-bar");
+  document.getElementById("total-label").textContent = `已選 ${total} / 32 隊`;
+  bar.style.width = pct + "%";
+  bar.className   = "progress-bar" + (total === 32 ? " done" : total > 32 ? " over" : "");
 }
 
 // ─── 第 1~5 輪：淘汰賽 ────────────────────────────────
@@ -346,16 +348,16 @@ async function renderKnockout(content, n) {
       <div class="matchup-card">
         <div class="matchup-header">對戰組 ${idx + 1}</div>
         <div class="matchup-teams">
-          <button class="matchup-team ${selA ? "selected" : ""}" onclick="selectKnockout(${n}, '${idA}', '${idB}')">
-            <input type="radio" name="match_${n}_${idx}" ${selA ? "checked" : ""} onclick="event.stopPropagation()">
+          <button class="matchup-team ${selA ? "selected":""}" onclick="selectKnockout(${n},'${idA}','${idB}')">
+            <input type="radio" name="match_${n}_${idx}" ${selA ? "checked":""}>
             <span class="weighting-dot w${teamA.weighting}">${teamA.weighting}</span>
             <div>
               <div class="team-name-cht">${teamA.nameCht}</div>
               <div class="team-name-en">${teamA.name}</div>
             </div>
           </button>
-          <button class="matchup-team ${selB ? "selected" : ""}" onclick="selectKnockout(${n}, '${idB}', '${idA}')">
-            <input type="radio" name="match_${n}_${idx}" ${selB ? "checked" : ""} onclick="event.stopPropagation()">
+          <button class="matchup-team ${selB ? "selected":""}" onclick="selectKnockout(${n},'${idB}','${idA}')">
+            <input type="radio" name="match_${n}_${idx}" ${selB ? "checked":""}>
             <span class="weighting-dot w${teamB.weighting}">${teamB.weighting}</span>
             <div>
               <div class="team-name-cht">${teamB.nameCht}</div>
@@ -369,82 +371,46 @@ async function renderKnockout(content, n) {
   content.innerHTML = html;
 }
 
-// ─── 已封盤時的唯讀顯示 ───────────────────────────────
-function renderRound0View(content) {
-  const selected = new Set(myPicks[0] || []);
-  if (selected.size === 0) return;
-  let extra = `<div class="card" style="margin-top:8px">
-    <div class="card-title">你的選擇</div>
+// ─── 封盤後唯讀顯示 ───────────────────────────────────
+function renderPickedView(content, picks) {
+  if (!picks || picks.length === 0) return;
+  let html = `<div class="card" style="margin-top:8px">
+    <div class="card-title">你的選擇（${picks.length} 隊）</div>
     <div class="team-grid">`;
-  selected.forEach(id => {
+  picks.forEach(id => {
     const t = TEAMS.find(t => t.teamId === id);
     if (!t) return;
-    extra += `<div class="team-card selected" style="cursor:default">
-      <span class="weighting-dot w${t.weighting}">${t.weighting}</span>
-      <div><div class="team-name-cht">${t.nameCht}</div>
-           <div class="team-name-en">${t.name}</div></div>
-    </div>`;
+    html += `
+      <div class="team-card selected" style="cursor:default">
+        <span class="weighting-dot w${t.weighting}">${t.weighting}</span>
+        <div>
+          <div class="team-name-cht">${t.nameCht}</div>
+          <div class="team-name-en">${t.name}</div>
+        </div>
+      </div>`;
   });
-  extra += `</div></div>`;
-  content.innerHTML += extra;
+  html += `</div></div>`;
+  content.innerHTML += html;
 }
 
-function renderKnockoutView(content, n) {
-  const selected = new Set(myPicks[n] || []);
-  if (selected.size === 0) return;
-  let extra = `<div class="card" style="margin-top:8px">
-    <div class="card-title">你的選擇</div>
-    <div class="team-grid">`;
-  selected.forEach(id => {
-    const t = TEAMS.find(t => t.teamId === id);
-    if (!t) return;
-    extra += `<div class="team-card selected" style="cursor:default">
-      <span class="weighting-dot w${t.weighting}">${t.weighting}</span>
-      <div><div class="team-name-cht">${t.nameCht}</div>
-           <div class="team-name-en">${t.name}</div></div>
-    </div>`;
-  });
-  extra += `</div></div>`;
-  content.innerHTML += extra;
-}
-
-// ─── 選隊互動：第 0 輪各組 ────────────────────────────
+// ─── 選隊互動：第 0 輪 ────────────────────────────────
 window.toggleTeam0 = (teamId) => {
-  const selected = new Set(myPicks[0] || []);
-  const team     = TEAMS.find(t => t.teamId === teamId);
+  const selected   = new Set(myPicks[0] || []);
+  const team       = TEAMS.find(t => t.teamId === teamId);
   const groupTeams = TEAMS.filter(t => t.group === team.group);
-  const groupSelected = groupTeams.filter(t => selected.has(t.teamId));
+  const groupCnt   = groupTeams.filter(t => selected.has(t.teamId)).length;
 
   if (selected.has(teamId)) {
     selected.delete(teamId);
   } else {
-    if (groupSelected.length >= 2) {
-      setStatus("每組最多選 2 隊，請先取消同組的選擇。", "err"); return;
+    if (groupCnt >= 3) {
+      setStatus("每組最多選 3 隊，請先取消同組的選擇。", "err"); return;
     }
     selected.add(teamId);
   }
   myPicks[0] = [...selected];
   renderRound0(document.getElementById("pick-content"));
-  setStatus("", "");
-};
-
-// ─── 選隊互動：第三名 ─────────────────────────────────
-window.toggleThird = (teamId) => {
-  const selected = new Set(myPicks[0] || []);
-  if (selected.has(teamId)) {
-    selected.delete(teamId);
-  } else {
-    const thirdCandidates = TEAMS.filter((t, _, arr) => {
-      return arr.filter(gt => gt.group === t.group).indexOf(t) === 2;
-    });
-    const thirdSelected = thirdCandidates.filter(t => selected.has(t.teamId));
-    if (thirdSelected.length >= 8) {
-      setStatus("第三名最多選 8 隊，請先取消其中一隊。", "err"); return;
-    }
-    selected.add(teamId);
-  }
-  myPicks[0] = [...selected];
-  renderRound0(document.getElementById("pick-content"));
+  updateProgress();
   setStatus("", "");
 };
 
@@ -452,8 +418,7 @@ window.toggleThird = (teamId) => {
 window.selectKnockout = (round, pickId, otherId) => {
   const selected = new Set(myPicks[round] || []);
   selected.delete(otherId);
-  if (selected.has(pickId)) selected.delete(pickId);
-  else selected.add(pickId);
+  selected.has(pickId) ? selected.delete(pickId) : selected.add(pickId);
   myPicks[round] = [...selected];
   renderKnockout(document.getElementById("pick-content"), round);
   setStatus("", "");
@@ -467,28 +432,26 @@ window.savePicks = async () => {
 
   // 驗證第 0 輪
   if (n === 0) {
-    const thirdCandidates = TEAMS.filter((t, _, arr) =>
-      arr.filter(gt => gt.group === t.group).indexOf(t) === 2
-    );
-    const thirdSelected = thirdCandidates.filter(t => selected.includes(t.teamId));
-    let groupError = false;
+    // 總數必須 32
+    if (selected.length !== 32) {
+      setStatus(`❌ 加總需選 32 隊，目前選了 ${selected.length} 隊。`, "err"); return;
+    }
+    // 每組必須 2~3 隊
+    let groupError = "";
     GROUPS.forEach(g => {
       const groupTeams = TEAMS.filter(t => t.group === g);
       const cnt = groupTeams.filter(t => selected.includes(t.teamId)).length;
-      if (cnt !== 2) groupError = true;
+      if (cnt < 2 || cnt > 3) groupError = `${g} 組選了 ${cnt} 隊（需 2~3 隊）`;
     });
     if (groupError) {
-      setStatus("❌ 每組必須選恰好 2 隊，請確認各組選擇。", "err"); return;
-    }
-    if (thirdSelected.length !== 8) {
-      setStatus(`❌ 第三名需選 8 隊，目前選了 ${thirdSelected.length} 隊。`, "err"); return;
+      setStatus(`❌ ${groupError}，請修正後再送出。`, "err"); return;
     }
   } else {
-    // 驗證淘汰賽：每組至少選 1 隊
+    // 淘汰賽：每組選 1 隊
     const resultSnap = await getDoc(doc(db, "results", String(n)));
     const matchups   = resultSnap.exists() ? (resultSnap.data().matchups || []) : [];
     if (selected.length !== matchups.length) {
-      setStatus(`❌ 共 ${matchups.length} 組對戰，請每組各選 1 隊（目前選了 ${selected.length} 隊）。`, "err"); return;
+      setStatus(`❌ 共 ${matchups.length} 組對戰，請每組各選 1 隊（目前 ${selected.length} 隊）。`, "err"); return;
     }
   }
 
