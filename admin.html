@@ -1,0 +1,716 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>管理者功能 — 2026世界盃足球輪盤盟主賽</title>
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    .admin-tabs { display:flex; gap:4px; flex-wrap:wrap; margin-bottom:20px; }
+    .admin-tab {
+      padding: 8px 16px; border-radius: 20px; font-size: 13px; font-weight:500;
+      border: 1.5px solid var(--border); background: var(--bg);
+      cursor: pointer; color: var(--text-sub); transition: all .15s;
+    }
+    .admin-tab:hover  { border-color:var(--primary); color:var(--primary); }
+    .admin-tab.active { background:var(--primary); border-color:var(--primary); color:#fff; }
+
+    .section { display:none; }
+    .section.active { display:block; }
+
+    /* 使用者管理表格 */
+    .user-table td, .user-table th { vertical-align:middle; }
+    .user-table select {
+      padding:4px 8px; border:1.5px solid var(--border);
+      border-radius:var(--radius); font-size:12px;
+      background:var(--bg); color:var(--text); cursor:pointer;
+    }
+    .user-table select:focus { border-color:var(--primary); outline:none; }
+
+    /* 封盤設定 */
+    .round-setting {
+      display:grid; grid-template-columns: 120px 1fr auto auto;
+      align-items:center; gap:10px; padding:10px 0;
+      border-bottom:1px solid var(--border);
+    }
+    .round-setting:last-child { border-bottom:none; }
+    .round-label { font-size:13px; font-weight:500; }
+    .status-badge-open   { color:var(--teal);  font-size:12px; font-weight:500; }
+    .status-badge-closed { color:var(--coral); font-size:12px; font-weight:500; }
+
+    /* 結果輸入 */
+    .result-group {
+      border:1.5px solid var(--border); border-radius:var(--radius);
+      margin-bottom:10px; overflow:hidden;
+    }
+    .result-group-header {
+      background:var(--bg2); padding:8px 12px;
+      font-size:13px; font-weight:500;
+      display:flex; align-items:center; justify-content:space-between;
+    }
+    .result-teams { display:grid; grid-template-columns:1fr 1fr; }
+    .result-team {
+      padding:10px 12px; cursor:pointer;
+      display:flex; align-items:center; gap:8px;
+      background:var(--bg); border:none; text-align:left; width:100%;
+      transition:background .15s;
+    }
+    .result-team:first-child { border-right:1px solid var(--border); }
+    .result-team:hover    { background:var(--teal-light); }
+    .result-team.advanced { background:var(--teal-light); }
+    .result-team.advanced .team-name-cht { color:#085041; font-weight:500; }
+    .result-team input[type="checkbox"] { pointer-events:none; accent-color:var(--teal); }
+
+    /* 積分計算 */
+    .calc-row {
+      display:flex; align-items:center; justify-content:space-between;
+      padding:10px 0; border-bottom:1px solid var(--border);
+    }
+    .calc-row:last-child { border-bottom:none; }
+    .calc-info { font-size:13px; }
+    .calc-label { font-weight:500; }
+    .calc-sub   { font-size:12px; color:var(--text-sub); margin-top:2px; }
+
+    /* matchup 設定 */
+    .matchup-setup {
+      display:grid; grid-template-columns:1fr auto 1fr;
+      align-items:center; gap:8px; margin-bottom:8px;
+    }
+    .matchup-setup select {
+      width:100%; padding:7px 8px;
+      border:1.5px solid var(--border); border-radius:var(--radius);
+      font-size:13px; background:var(--bg); color:var(--text);
+    }
+    .matchup-setup select:focus { border-color:var(--primary); outline:none; }
+    .vs-label {
+      font-size:12px; font-weight:500; color:var(--text-sub);
+      text-align:center;
+    }
+    .matchup-row {
+      display:flex; align-items:center; gap:8px; margin-bottom:8px;
+    }
+    .matchup-row .btn { flex-shrink:0; }
+  </style>
+</head>
+<body>
+
+<!-- 導覽列 -->
+<nav class="navbar">
+  <div class="navbar-brand">
+    <span class="flag">⚽</span>
+    <span>2026 輪盤盟主賽</span>
+  </div>
+  <div class="navbar-nav">
+    <span class="navbar-user" id="nav-nickname"></span>
+    <a href="main.html">🏆 排行榜</a>
+    <a href="pick.html">🎯 選隊</a>
+    <a href="profile.html">👤 設定</a>
+    <a href="admin.html" class="active">⚙️ 管理</a>
+    <a href="#" onclick="doLogout()">🚪 登出</a>
+  </div>
+</nav>
+
+<div class="container">
+
+  <!-- 管理頁籤 -->
+  <div class="admin-tabs">
+    <div class="admin-tab active" onclick="switchTab('users')">👥 使用者管理</div>
+    <div class="admin-tab"       onclick="switchTab('rounds')">🔒 封盤設定</div>
+    <div class="admin-tab"       onclick="switchTab('results')">📋 比賽結果</div>
+    <div class="admin-tab"       onclick="switchTab('calc')">🧮 積分計算</div>
+  </div>
+
+  <!-- ① 使用者管理 -->
+  <div id="sec-users" class="section active">
+    <div class="card" style="padding:0; overflow:hidden">
+      <div style="padding:14px 16px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between">
+        <span style="font-size:15px; font-weight:500">👥 使用者清單</span>
+        <button class="btn btn-outline btn-sm" onclick="loadUsers()">🔄 重新整理</button>
+      </div>
+      <div id="users-loading" class="loading"><div class="spinner"></div>載入中...</div>
+      <div style="overflow-x:auto">
+        <table class="table user-table" id="users-table" style="display:none">
+          <thead>
+            <tr>
+              <th>暱稱</th>
+              <th>Email</th>
+              <th style="text-align:center">管理員</th>
+              <th style="text-align:center">使用者類型</th>
+              <th style="text-align:center">審核狀態</th>
+              <th style="text-align:center">操作</th>
+            </tr>
+          </thead>
+          <tbody id="users-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ② 封盤設定 -->
+  <div id="sec-rounds" class="section">
+    <div class="card">
+      <div class="card-title">🔒 各輪封盤時間設定</div>
+      <div class="alert alert-info">
+        封盤時間以台灣時間（UTC+8）為準。時間到達後，使用者將無法修改選隊。
+      </div>
+      <div id="rounds-loading" class="loading"><div class="spinner"></div>載入中...</div>
+      <div id="rounds-content" style="display:none"></div>
+      <div id="rounds-msg" style="display:none; margin-top:12px"></div>
+      <div style="margin-top:16px; display:none" id="rounds-btn-wrap">
+        <button class="btn btn-primary" onclick="saveRounds()">💾 儲存封盤設定</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ③ 比賽結果 -->
+  <div id="sec-results" class="section">
+    <div class="card">
+      <div class="card-title">📋 比賽結果設定</div>
+
+      <!-- 輪次選擇 -->
+      <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:16px" id="result-round-tabs"></div>
+
+      <div id="results-loading" class="loading"><div class="spinner"></div>載入中...</div>
+      <div id="results-content" style="display:none"></div>
+      <div id="results-msg" style="display:none; margin-top:12px"></div>
+    </div>
+  </div>
+
+  <!-- ④ 積分計算 -->
+  <div id="sec-calc" class="section">
+    <div class="card">
+      <div class="card-title">🧮 積分計算</div>
+      <div class="alert alert-warning">
+        請確認各輪比賽結果已正確設定後，再執行積分計算。計算後結果將覆蓋舊積分。
+      </div>
+      <div id="calc-content"></div>
+      <div id="calc-msg" style="display:none; margin-top:12px"></div>
+    </div>
+  </div>
+
+</div>
+
+<script type="module">
+import { auth, db } from "./js/firebase-config.js";
+import { TEAMS, GROUPS } from "./js/teams-data.js";
+import {
+  onAuthStateChanged, signOut
+} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+import {
+  doc, getDoc, setDoc, updateDoc, getDocs,
+  collection, writeBatch, serverTimestamp
+} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+let currentUser   = null;
+let currentResultRound = 0;
+let advancedSets  = {};   // { "0": Set, "1": Set, ... }
+let matchupData   = {};   // { "1": [[idA,idB],...], ... }
+
+// ─── 認證（僅管理員可進入）────────────────────────────
+onAuthStateChanged(auth, async (user) => {
+  if (!user) { window.location.href = "index.html"; return; }
+  const snap = await getDoc(doc(db, "users", user.uid));
+  if (!snap.exists() || !snap.data().isApproved || !snap.data().isAdmin) {
+    window.location.href = "main.html"; return;
+  }
+  currentUser = { ...snap.data(), uid: user.uid };
+  document.getElementById("nav-nickname").textContent = currentUser.nickname;
+  loadUsers();
+  loadRounds();
+  loadResultRoundTabs();
+  renderCalc();
+});
+
+window.doLogout = async () => { await signOut(auth); window.location.href = "index.html"; };
+
+// ─── 頁籤切換 ─────────────────────────────────────────
+window.switchTab = (tab) => {
+  document.querySelectorAll(".admin-tab").forEach((el, i) => {
+    const tabs = ["users","rounds","results","calc"];
+    el.classList.toggle("active", tabs[i] === tab);
+  });
+  document.querySelectorAll(".section").forEach(el => el.classList.remove("active"));
+  document.getElementById(`sec-${tab}`).classList.add("active");
+};
+
+// ═══════════════════════════════════════════════════════
+// ① 使用者管理
+// ═══════════════════════════════════════════════════════
+window.loadUsers = async () => {
+  document.getElementById("users-loading").style.display = "block";
+  document.getElementById("users-table").style.display   = "none";
+  const snap  = await getDocs(collection(db, "users"));
+  const users = [];
+  snap.forEach(d => { if (d.id !== "_schema") users.push({ id:d.id, ...d.data() }); });
+  users.sort((a,b) => (a.nickname||"").localeCompare(b.nickname||"", "zh-TW"));
+
+  const tbody = document.getElementById("users-tbody");
+  tbody.innerHTML = "";
+  users.forEach(u => {
+    const isSelf = u.uid === currentUser.uid || u.id === currentUser.uid;
+    tbody.innerHTML += `
+      <tr>
+        <td><strong>${u.nickname}</strong>${isSelf ? ' <span class="badge badge-primary" style="font-size:10px">我</span>' : ""}</td>
+        <td style="font-size:12px; color:var(--text-sub)">${u.email}</td>
+        <td style="text-align:center">
+          ${u.isAdmin
+            ? `<span class="badge badge-teal">是</span>`
+            : `<span style="color:var(--text-sub); font-size:12px">否</span>`}
+        </td>
+        <td style="text-align:center">
+          <select onchange="updateUserField('${u.id}','userType',this.value)" ${isSelf ? "disabled" : ""}>
+            <option value="player"  ${u.userType==="player"  ? "selected":""}>參賽者</option>
+            <option value="trial"   ${u.userType==="trial"   ? "selected":""}>試用者</option>
+          </select>
+        </td>
+        <td style="text-align:center">
+          <select onchange="updateUserField('${u.id}','isApproved',this.value==='true')" ${isSelf ? "disabled" : ""}>
+            <option value="false" ${!u.isApproved ? "selected":""}>未審核</option>
+            <option value="true"  ${ u.isApproved ? "selected":""}>已審核</option>
+          </select>
+        </td>
+        <td style="text-align:center">
+          ${isSelf
+            ? `<span style="font-size:12px; color:var(--text-sub)">—</span>`
+            : `<button class="btn btn-outline btn-sm" onclick="toggleAdmin('${u.id}',${!u.isAdmin})">
+                ${u.isAdmin ? "取消管理員" : "設為管理員"}
+               </button>`}
+        </td>
+      </tr>`;
+  });
+
+  document.getElementById("users-loading").style.display = "none";
+  document.getElementById("users-table").style.display   = "table";
+};
+
+window.updateUserField = async (uid, field, value) => {
+  try {
+    await updateDoc(doc(db, "users", uid), { [field]: value });
+  } catch(e) { alert("更新失敗：" + e.message); }
+};
+
+window.toggleAdmin = async (uid, makeAdmin) => {
+  if (!confirm(makeAdmin ? "確定設為管理員？" : "確定取消管理員身分？")) return;
+  try {
+    await updateDoc(doc(db, "users", uid), { isAdmin: makeAdmin });
+    loadUsers();
+  } catch(e) { alert("更新失敗：" + e.message); }
+};
+
+// ═══════════════════════════════════════════════════════
+// ② 封盤設定
+// ═══════════════════════════════════════════════════════
+async function loadRounds() {
+  const snap   = await getDocs(collection(db, "rounds"));
+  const rounds = [];
+  snap.forEach(d => rounds.push(d.data()));
+  rounds.sort((a,b) => a.round - b.round);
+
+  const labels = ["小組賽","32強淘汰賽","16強淘汰賽","8強淘汰賽","4強淘汰賽","冠軍決賽"];
+  let html = "";
+
+  rounds.forEach(r => {
+    const due = r.dueDate?.toDate ? r.dueDate.toDate() : new Date(r.dueDate);
+    const now = new Date();
+    const closed = now >= due || r.status === "close";
+
+    // 格式化台灣時間給 datetime-local input
+    const twOffset  = 8 * 60;
+    const localDate = new Date(due.getTime() + (twOffset - due.getTimezoneOffset()) * 60000 - (due.getTimezoneOffset() + twOffset) * 60000);
+    // 簡單取法：轉成 ISO 再截
+    const twTime    = new Date(due.getTime() + 8 * 3600 * 1000);
+    const dtVal     = twTime.toISOString().slice(0, 16);
+
+    html += `
+      <div class="round-setting">
+        <span class="round-label">第 ${r.round} 輪 ${labels[r.round]}</span>
+        <input type="datetime-local" id="due_${r.round}" class="form-control"
+               value="${dtVal}" style="font-size:13px">
+        <span class="${closed ? "status-badge-closed":"status-badge-open"}">
+          ${closed ? "🔒 已封盤":"🟢 開放中"}
+        </span>
+      </div>`;
+  });
+
+  document.getElementById("rounds-content").innerHTML = html;
+  document.getElementById("rounds-loading").style.display  = "none";
+  document.getElementById("rounds-content").style.display  = "block";
+  document.getElementById("rounds-btn-wrap").style.display = "block";
+}
+
+window.saveRounds = async () => {
+  const msg = document.getElementById("rounds-msg");
+  try {
+    const batch = writeBatch(db);
+    const now   = new Date();
+    for (let i = 0; i <= 5; i++) {
+      const val    = document.getElementById(`due_${i}`).value;
+      if (!val) continue;
+      // datetime-local 值為台灣時間，轉回 UTC
+      const twDate = new Date(val + ":00+08:00");
+      const closed = now >= twDate;
+      batch.update(doc(db, "rounds", String(i)), {
+        dueDate: twDate,
+        status:  closed ? "close" : "open"
+      });
+    }
+    await batch.commit();
+    msg.className   = "alert alert-success";
+    msg.textContent = "✓ 封盤時間已儲存！";
+    msg.style.display = "block";
+    setTimeout(() => msg.style.display = "none", 3000);
+  } catch(e) {
+    msg.className   = "alert alert-danger";
+    msg.textContent = "❌ 儲存失敗：" + e.message;
+    msg.style.display = "block";
+  }
+};
+
+// ═══════════════════════════════════════════════════════
+// ③ 比賽結果
+// ═══════════════════════════════════════════════════════
+async function loadResultRoundTabs() {
+  const labels = ["小組賽","32強","16強","8強","4強","決賽"];
+  const wrap   = document.getElementById("result-round-tabs");
+  wrap.innerHTML = "";
+  for (let i = 0; i <= 5; i++) {
+    const btn = document.createElement("div");
+    btn.className = `admin-tab ${i === 0 ? "active":""}`;
+    btn.textContent = `第${i}輪 ${labels[i]}`;
+    btn.onclick = () => {
+      document.querySelectorAll("#result-round-tabs .admin-tab")
+        .forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+      currentResultRound = i;
+      loadResultContent(i);
+    };
+    wrap.appendChild(btn);
+  }
+  loadResultContent(0);
+}
+
+async function loadResultContent(n) {
+  document.getElementById("results-loading").style.display = "block";
+  document.getElementById("results-content").style.display = "none";
+  document.getElementById("results-msg").style.display     = "none";
+
+  const resultSnap = await getDoc(doc(db, "results", String(n)));
+  const resultData = resultSnap.exists() ? resultSnap.data() : { advancedTeams:[], matchups:[] };
+
+  advancedSets[n] = new Set(resultData.advancedTeams || []);
+  matchupData[n]  = resultData.matchups || [];
+
+  let html = "";
+
+  if (n === 0) {
+    // 小組賽：直接勾選晉級隊伍（每組選2~3隊）
+    html += `
+      <p style="font-size:13px; color:var(--text-sub); margin-bottom:14px">
+        勾選各組晉級隊伍（每組 2~3 隊，共 32 隊）。
+      </p>`;
+    GROUPS.forEach(g => {
+      const teams  = TEAMS.filter(t => t.group === g);
+      const selCnt = teams.filter(t => advancedSets[0].has(t.teamId)).length;
+      html += `
+        <div class="result-group">
+          <div class="result-group-header">
+            <span>${g} 組</span>
+            <span style="font-size:12px; color:${selCnt>=2&&selCnt<=3?"var(--teal)":"var(--amber)"}">
+              ${selCnt} / 2~3 隊
+            </span>
+          </div>
+          <div class="result-teams">`;
+      teams.forEach(t => {
+        const adv = advancedSets[0].has(t.teamId);
+        html += `
+          <button class="result-team ${adv?"advanced":""}" onclick="toggleResult(0,'${t.teamId}',3)">
+            <input type="checkbox" ${adv?"checked":""}>
+            <span class="weighting-dot w${t.weighting}">${t.weighting}</span>
+            <div>
+              <div class="team-name-cht">${t.nameCht}</div>
+              <div class="team-name-en" style="font-size:11px; color:var(--text-sub)">${t.name}</div>
+            </div>
+          </button>`;
+      });
+      html += `</div></div>`;
+    });
+
+  } else {
+    // 淘汰賽：先設定對戰組別，再勾選晉級隊伍
+    const advancedFromPrev = n === 1
+      ? null
+      : (await getDoc(doc(db, "results", String(n-1)))).data()?.advancedTeams || [];
+
+    // 可選隊伍來源：若有上一輪晉級隊伍則用，否則顯示所有隊伍
+    const availTeams = advancedFromPrev && advancedFromPrev.length > 0
+      ? TEAMS.filter(t => advancedFromPrev.includes(t.teamId))
+      : TEAMS;
+
+    const matchCounts = [0, 16, 8, 4, 2, 1];
+    const matchCount  = matchCounts[n];
+
+    html += `
+      <div style="margin-bottom:16px">
+        <p style="font-size:13px; color:var(--text-sub); margin-bottom:10px">
+          <strong>步驟 1：</strong>設定 ${matchCount} 組對戰組別
+        </p>`;
+
+    // 顯示現有 matchups
+    for (let i = 0; i < matchCount; i++) {
+      const pair  = matchupData[n][i] || ["", ""];
+      const opts  = availTeams.map(t =>
+        `<option value="${t.teamId}" ${pair[0]===t.teamId||pair[1]===t.teamId?"":""}>${t.nameCht}</option>`
+      ).join("");
+      const optsA = availTeams.map(t =>
+        `<option value="${t.teamId}" ${pair[0]===t.teamId?"selected":""}>${t.nameCht}</option>`
+      ).join("");
+      const optsB = availTeams.map(t =>
+        `<option value="${t.teamId}" ${pair[1]===t.teamId?"selected":""}>${t.nameCht}</option>`
+      ).join("");
+
+      html += `
+        <div class="matchup-row">
+          <span style="font-size:12px; color:var(--text-sub); min-width:40px">組 ${i+1}</span>
+          <div class="matchup-setup" style="flex:1">
+            <select id="mu_${n}_${i}_a" onchange="updateMatchup(${n})">
+              <option value="">— 選擇隊伍 —</option>${optsA}
+            </select>
+            <span class="vs-label">VS</span>
+            <select id="mu_${n}_${i}_b" onchange="updateMatchup(${n})">
+              <option value="">— 選擇隊伍 —</option>${optsB}
+            </select>
+          </div>
+        </div>`;
+    }
+
+    html += `
+        <button class="btn btn-outline btn-sm" onclick="saveMatchups(${n})" style="margin-top:4px">
+          💾 儲存對戰組別
+        </button>
+      </div>
+      <hr style="border:none; border-top:1px solid var(--border); margin:16px 0">
+      <p style="font-size:13px; color:var(--text-sub); margin-bottom:10px">
+        <strong>步驟 2：</strong>勾選晉級隊伍（共 ${matchCount/2||1} 隊）
+      </p>`;
+
+    // 以 matchups 為基礎顯示對戰勾選
+    if (matchupData[n].length === 0) {
+      html += `<div class="alert alert-warning">請先完成步驟 1 設定對戰組別。</div>`;
+    } else {
+      matchupData[n].forEach((pair, idx) => {
+        const [idA, idB] = pair;
+        const teamA = TEAMS.find(t => t.teamId === idA) || { teamId:idA, nameCht:idA, weighting:1, name:idA };
+        const teamB = TEAMS.find(t => t.teamId === idB) || { teamId:idB, nameCht:idB, weighting:1, name:idB };
+        const advA  = advancedSets[n].has(idA);
+        const advB  = advancedSets[n].has(idB);
+        html += `
+          <div class="result-group">
+            <div class="result-group-header">對戰組 ${idx+1}</div>
+            <div class="result-teams">
+              <button class="result-team ${advA?"advanced":""}" onclick="toggleResult(${n},'${idA}',1,'${idB}')">
+                <input type="checkbox" ${advA?"checked":""}>
+                <span class="weighting-dot w${teamA.weighting}">${teamA.weighting}</span>
+                <div>
+                  <div class="team-name-cht">${teamA.nameCht}</div>
+                  <div class="team-name-en" style="font-size:11px;color:var(--text-sub)">${teamA.name}</div>
+                </div>
+              </button>
+              <button class="result-team ${advB?"advanced":""}" onclick="toggleResult(${n},'${idB}',1,'${idA}')">
+                <input type="checkbox" ${advB?"checked":""}>
+                <span class="weighting-dot w${teamB.weighting}">${teamB.weighting}</span>
+                <div>
+                  <div class="team-name-cht">${teamB.nameCht}</div>
+                  <div class="team-name-en" style="font-size:11px;color:var(--text-sub)">${teamB.name}</div>
+                </div>
+              </button>
+            </div>
+          </div>`;
+      });
+    }
+  }
+
+  html += `
+    <div style="margin-top:16px">
+      <button class="btn btn-teal" onclick="saveResults(${n})">
+        ✓ 儲存第 ${n} 輪晉級結果
+      </button>
+    </div>`;
+
+  document.getElementById("results-content").innerHTML = html;
+  document.getElementById("results-loading").style.display = "none";
+  document.getElementById("results-content").style.display = "block";
+}
+
+// 勾選晉級隊伍
+window.toggleResult = (n, teamId, maxPer, otherId) => {
+  const set = advancedSets[n] || new Set();
+  if (set.has(teamId)) {
+    set.delete(teamId);
+  } else {
+    // 淘汰賽每組只能選1隊
+    if (otherId) {
+      set.delete(otherId);
+      set.add(teamId);
+    } else {
+      // 小組賽限制每組最多 maxPer 隊
+      const team      = TEAMS.find(t => t.teamId === teamId);
+      const groupCnt  = TEAMS.filter(t => t.group === team?.group && set.has(t.teamId)).length;
+      if (groupCnt >= maxPer) return;
+      set.add(teamId);
+    }
+  }
+  advancedSets[n] = set;
+  loadResultContent(n);
+};
+
+// 更新 matchup 資料
+window.updateMatchup = (n) => {
+  const matchCounts = [0, 16, 8, 4, 2, 1];
+  const matchups    = [];
+  for (let i = 0; i < matchCounts[n]; i++) {
+    const a = document.getElementById(`mu_${n}_${i}_a`)?.value;
+    const b = document.getElementById(`mu_${n}_${i}_b`)?.value;
+    if (a && b) matchups.push([a, b]);
+    else matchups.push(["", ""]);
+  }
+  matchupData[n] = matchups;
+};
+
+// 儲存對戰組別
+window.saveMatchups = async (n) => {
+  updateMatchup(n);
+  const msg = document.getElementById("results-msg");
+  try {
+    await updateDoc(doc(db, "results", String(n)), {
+      matchups:  matchupData[n],
+      updatedAt: serverTimestamp()
+    });
+    msg.className   = "alert alert-success";
+    msg.textContent = `✓ 第 ${n} 輪對戰組別已儲存！`;
+    msg.style.display = "block";
+    setTimeout(() => { msg.style.display="none"; loadResultContent(n); }, 2000);
+  } catch(e) {
+    msg.className   = "alert alert-danger";
+    msg.textContent = "❌ 儲存失敗：" + e.message;
+    msg.style.display = "block";
+  }
+};
+
+// 儲存晉級結果
+window.saveResults = async (n) => {
+  const msg      = document.getElementById("results-msg");
+  const advanced = [...(advancedSets[n] || [])];
+  try {
+    await updateDoc(doc(db, "results", String(n)), {
+      advancedTeams: advanced,
+      updatedAt:     serverTimestamp()
+    });
+    msg.className   = "alert alert-success";
+    msg.textContent = `✓ 第 ${n} 輪晉級結果已儲存（${advanced.length} 隊）！`;
+    msg.style.display = "block";
+    setTimeout(() => msg.style.display = "none", 3000);
+  } catch(e) {
+    msg.className   = "alert alert-danger";
+    msg.textContent = "❌ 儲存失敗：" + e.message;
+    msg.style.display = "block";
+  }
+};
+
+// ═══════════════════════════════════════════════════════
+// ④ 積分計算
+// ═══════════════════════════════════════════════════════
+function renderCalc() {
+  const labels = ["小組賽","32強淘汰賽","16強淘汰賽","8強淘汰賽","4強淘汰賽","冠軍決賽"];
+  let html = "";
+  for (let i = 0; i <= 5; i++) {
+    html += `
+      <div class="calc-row">
+        <div class="calc-info">
+          <div class="calc-label">第 ${i} 輪：${labels[i]}</div>
+          <div class="calc-sub">${i === 0 ? "每隊 +1 分（無加乘）" : `基準分 × ${i}（加乘倍數）`}</div>
+        </div>
+        <button class="btn btn-primary btn-sm" onclick="calcRound(${i})" id="calc-btn-${i}">
+          計算積分
+        </button>
+      </div>`;
+  }
+  document.getElementById("calc-content").innerHTML = html;
+}
+
+window.calcRound = async (n) => {
+  const btn = document.getElementById(`calc-btn-${n}`);
+  const msg = document.getElementById("calc-msg");
+  btn.disabled    = true;
+  btn.textContent = "計算中...";
+  msg.style.display = "none";
+
+  try {
+    // 取得晉級隊伍
+    const resultSnap = await getDoc(doc(db, "results", String(n)));
+    if (!resultSnap.exists()) throw new Error("找不到比賽結果，請先設定晉級隊伍。");
+    const advanced = new Set(resultSnap.data().advancedTeams || []);
+    if (advanced.size === 0) throw new Error("晉級隊伍尚未設定，請先在「比賽結果」頁填入。");
+
+    // 取得所有使用者的選擇
+    const usersSnap = await getDocs(collection(db, "users"));
+    const batch     = writeBatch(db);
+    let   calcCount = 0;
+
+    for (const userDoc of usersSnap.docs) {
+      if (userDoc.id === "_schema") continue;
+      const uid      = userDoc.id;
+      const pickSnap = await getDoc(doc(db, "picks", `${uid}_${n}`));
+      const picks    = pickSnap.exists() ? (pickSnap.data().selectedTeams || []) : [];
+
+      let roundScore = 0;
+      picks.forEach(teamId => {
+        if (!advanced.has(teamId)) return;
+        const team = TEAMS.find(t => t.teamId === teamId);
+        if (!team) return;
+        if (n === 0) {
+          roundScore += 1;                           // 小組賽：每隊 +1 分
+        } else {
+          roundScore += team.weighting * n;          // 淘汰賽：基準分 × 輪次倍數
+        }
+      });
+
+      // 讀取現有積分，累加
+      const scoreSnap = await getDoc(doc(db, "scores", uid));
+      const existing  = scoreSnap.exists() ? scoreSnap.data() : {};
+      const updated   = {
+        uid,
+        round0: existing.round0 || 0,
+        round1: existing.round1 || 0,
+        round2: existing.round2 || 0,
+        round3: existing.round3 || 0,
+        round4: existing.round4 || 0,
+        round5: existing.round5 || 0,
+        [`round${n}`]: roundScore,
+        lastCalcAt: serverTimestamp()
+      };
+      updated.total =
+        updated.round0 + updated.round1 + updated.round2 +
+        updated.round3 + updated.round4 + updated.round5;
+
+      batch.set(doc(db, "scores", uid), updated);
+      calcCount++;
+    }
+
+    await batch.commit();
+    msg.className   = "alert alert-success";
+    msg.textContent = `✓ 第 ${n} 輪積分計算完成！共計算 ${calcCount} 位使用者。`;
+    msg.style.display = "block";
+
+  } catch(e) {
+    msg.className   = "alert alert-danger";
+    msg.textContent = "❌ 計算失敗：" + e.message;
+    msg.style.display = "block";
+  }
+
+  btn.disabled    = false;
+  btn.textContent = "計算積分";
+};
+</script>
+
+</body>
+</html>
