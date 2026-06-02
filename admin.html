@@ -258,7 +258,7 @@ window.loadUsers = async () => {
             : `<span style="color:var(--text-sub); font-size:12px">否</span>`}
         </td>
         <td style="text-align:center">
-          <select onchange="updateUserField('${u.id}','userType',this.value)" ${isSelf ? "disabled" : ""}>
+          <select onchange="updateUserField('${u.id}','userType',this.value)">
             <option value="player"  ${u.userType==="player"  ? "selected":""}>參賽者</option>
             <option value="trial"   ${u.userType==="trial"   ? "selected":""}>試用者</option>
           </select>
