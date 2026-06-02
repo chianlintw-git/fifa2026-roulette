@@ -117,7 +117,7 @@ onAuthStateChanged(auth, async (user) => {
   if (!snap.exists() || !snap.data().isApproved) {
     await signOut(auth); window.location.href = "index.html"; return;
   }
-  currentUser = snap.data();
+  currentUser = { ...snap.data(), uid: user.uid };  // 強制用 Auth UID
   document.getElementById("nav-nickname").textContent = currentUser.nickname;
   if (currentUser.isAdmin) {
     document.getElementById("nav-admin").style.display = "inline-flex";
