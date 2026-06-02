@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>使用者設定 — 2026世界盃足球輪盤盟主賽</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<!-- 導覽列 -->
+<nav class="navbar">
+  <div class="navbar-brand">
+    <span class="flag">⚽</span>
+    <span>2026 輪盤盟主賽</span>
+  </div>
+  <div class="navbar-nav">
+    <span class="navbar-user" id="nav-nickname"></span>
+    <a href="main.html">🏆 排行榜</a>
+    <a href="pick.html">🎯 選隊</a>
+    <a href="profile.html" class="active">👤 設定</a>
+    <a href="admin.html" id="nav-admin" style="display:none">⚙️ 管理</a>
+    <a href="#" onclick="doLogout()">🚪 登出</a>
+  </div>
+</nav>
+
+<div class="container">
+
+  <div style="max-width:480px; margin:0 auto">
+
+    <!-- 帳號資訊 -->
+    <div class="card">
+      <div class="card-title">👤 帳號資訊</div>
+      <div id="loading-profile" class="loading">
+        <div class="spinner"></div>載入中...
+      </div>
+      <div id="profile-content" style="display:none">
+
+        <!-- 唯讀欄位 -->
+        <div class="form-group">
+          <label class="form-label">電子郵件（帳號）</label>
+          <div style="padding:9px 12px; background:var(--bg2); border:1.5px solid var(--border);
+                      border-radius:var(--radius); font-size:14px; color:var(--text-sub)">
+            <span id="show-email"></span>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">使用者類型</label>
+          <div style="padding:9px 12px; background:var(--bg2); border:1.5px solid var(--border);
+                      border-radius:var(--radius); font-size:14px; color:var(--text-sub);
+                      display:flex; align-items:center; gap:8px">
+            <span id="show-usertype"></span>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">管理員身分</label>
+          <div style="padding:9px 12px; background:var(--bg2); border:1.5px solid var(--border);
+                      border-radius:var(--radius); font-size:14px; color:var(--text-sub)">
+            <span id="show-admin"></span>
+          </div>
+        </div>
+
+        <hr style="border:none; border-top:1px solid var(--border); margin:16px 0">
+
+        <!-- 可修改欄位 -->
+        <div id="msg-profile" style="display:none"></div>
+
+        <div class="form-group">
+          <label class="form-label">暱稱 <span style="color:#E24B4A">*</span></label>
+          <input type="text" id="edit-nickname" class="form-control" placeholder="顯示在排行榜的名稱">
+        </div>
+
+        <hr style="border:none; border-top:1px solid var(--border); margin:16px 0">
+
+        <div class="form-group">
+          <label class="form-label">新密碼（不修改請留空）</label>
+          <input type="password" id="edit-password" class="form-control" placeholder="至少 6 個字元">
+        </div>
+        <div class="form-group">
+          <label class="form-label">確認新密碼</label>
+          <input type="password" id="edit-password2" class="form-control" placeholder="再輸入一次新密碼">
+        </div>
+
+        <div style="display:flex; gap:10px; justify-content:flex-end; margin-top:4px">
+          <button class="btn btn-outline" onclick="resetForm()">重設</button>
+          <button class="btn btn-primary" onclick="saveProfile()">修改</button>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- 我的選隊摘要 -->
+    <div class="card">
+      <div class="card-title">🎯 我的選隊摘要</div>
+      <div id="picks-summary">
+        <div class="loading"><div class="spinner"></div></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script type="module">
+import { auth, db } from "./js/firebase-config.js";
+import { TEAMS } from "./js/teams-data.js";
+import {
+  onAuthStateChanged, signOut,
+  updatePassword, reauthenticateWithCredential,
+  EmailAuthProvider
+} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+import {
+  doc, getDoc, updateDoc, collection, getDocs
+} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+let currentUser = null;
+let authUser    = null;
+
+// ─── 認證 ─────────────────────────────────────────────
+onAuthStateChanged(auth, async (user) => {
+  if (!user) { window.location.href = "index.html"; return; }
+  const snap = await getDoc(doc(db, "users", user.uid));
+  if (!snap.exists() || !snap.data().isApproved) {
+    await signOut(auth); window.location.href = "index.html"; return;
+  }
+  authUser    = user;
+  currentUser = { ...snap.data(), uid: user.uid };
+  document.getElementById("nav-nickname").textContent = currentUser.nickname;
+  if (currentUser.isAdmin) document.getElementById("nav-admin").style.display = "inline-flex";
+  renderProfile();
+  loadPicksSummary();
+});
+
+window.doLogout = async () => { await signOut(auth); window.location.href = "index.html"; };
+
+// ─── 顯示個人資料 ──────────────────────────────────────
+function renderProfile() {
+  document.getElementById("show-email").textContent    = currentUser.email;
+  document.getElementById("edit-nickname").value       = currentUser.nickname;
+  document.getElementById("show-usertype").innerHTML   =
+    currentUser.userType === "player"
+      ? `<span class="badge badge-primary">參賽者</span>`
+      : `<span class="badge badge-amber">試用者</span>`;
+  document.getElementById("show-admin").innerHTML      =
+    currentUser.isAdmin
+      ? `<span class="badge badge-teal">✓ 是管理員</span>`
+      : `<span style="color:var(--text-sub)">否</span>`;
+
+  document.getElementById("loading-profile").style.display = "none";
+  document.getElementById("profile-content").style.display = "block";
+}
+
+// ─── 重設表單 ─────────────────────────────────────────
+window.resetForm = () => {
+  document.getElementById("edit-nickname").value   = currentUser.nickname;
+  document.getElementById("edit-password").value   = "";
+  document.getElementById("edit-password2").value  = "";
+  showMsg("", "");
+};
+
+// ─── 儲存修改 ─────────────────────────────────────────
+window.saveProfile = async () => {
+  const nickname  = document.getElementById("edit-nickname").value.trim();
+  const password  = document.getElementById("edit-password").value;
+  const password2 = document.getElementById("edit-password2").value;
+
+  if (!nickname) { showMsg("暱稱不可空白。", "danger"); return; }
+
+  // 密碼修改驗證
+  if (password || password2) {
+    if (password.length < 6)    { showMsg("新密碼至少需要 6 個字元。", "danger"); return; }
+    if (password !== password2) { showMsg("兩次輸入的密碼不一致。", "danger"); return; }
+  }
+
+  try {
+    // 更新 Firestore 暱稱
+    if (nickname !== currentUser.nickname) {
+      await updateDoc(doc(db, "users", currentUser.uid), { nickname });
+      currentUser.nickname = nickname;
+      document.getElementById("nav-nickname").textContent = nickname;
+    }
+
+    // 更新密碼
+    if (password) {
+      await updatePassword(authUser, password);
+    }
+
+    showMsg("✓ 修改成功！", "success");
+    document.getElementById("edit-password").value  = "";
+    document.getElementById("edit-password2").value = "";
+
+  } catch (e) {
+    if (e.code === "auth/requires-recent-login") {
+      showMsg("修改密碼需要重新驗證，請登出後重新登入再操作。", "danger");
+    } else {
+      showMsg("修改失敗：" + e.message, "danger");
+    }
+  }
+};
+
+// ─── 選隊摘要 ─────────────────────────────────────────
+async function loadPicksSummary() {
+  const labels   = ["小組賽","32強","16強","8強","4強","冠軍決賽"];
+  const summary  = document.getElementById("picks-summary");
+  let   html     = `<table class="table">
+    <thead>
+      <tr>
+        <th>輪次</th>
+        <th style="text-align:center">選隊數</th>
+        <th>狀態</th>
+      </tr>
+    </thead>
+    <tbody>`;
+
+  for (let i = 0; i <= 5; i++) {
+    const snap   = await getDoc(doc(db, "picks", `${currentUser.uid}_${i}`));
+    const picks  = snap.exists() ? (snap.data().selectedTeams || []) : [];
+    const rSnap  = await getDoc(doc(db, "rounds", String(i)));
+    const status = rSnap.exists() ? rSnap.data().status : "open";
+    const closed = status === "close";
+
+    let statusBadge = "";
+    if (closed && picks.length > 0)  statusBadge = `<span class="badge badge-teal">已封盤 ✓</span>`;
+    else if (closed && picks.length === 0) statusBadge = `<span class="badge badge-coral">封盤未選</span>`;
+    else if (picks.length > 0)        statusBadge = `<span class="badge badge-primary">已選擇</span>`;
+    else                              statusBadge = `<span class="badge badge-gray">尚未選擇</span>`;
+
+    html += `
+      <tr>
+        <td>第 ${i} 輪 ${labels[i]}</td>
+        <td style="text-align:center">${picks.length > 0 ? picks.length : "—"}</td>
+        <td>${statusBadge}</td>
+      </tr>`;
+  }
+
+  html += `</tbody></table>`;
+  summary.innerHTML = html;
+}
+
+function showMsg(msg, type) {
+  const el = document.getElementById("msg-profile");
+  if (!msg) { el.style.display = "none"; return; }
+  el.className   = `alert alert-${type}`;
+  el.textContent = msg;
+  el.style.display = "block";
+}
+</script>
+
+</body>
+</html>
