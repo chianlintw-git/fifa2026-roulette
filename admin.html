@@ -118,6 +118,7 @@
     <div class="admin-tab"       onclick="switchTab('rounds')">🔒 封盤設定</div>
     <div class="admin-tab"       onclick="switchTab('results')">📋 比賽結果</div>
     <div class="admin-tab"       onclick="switchTab('calc')">🧮 積分計算</div>
+    <div class="admin-tab"       onclick="switchTab('logs')">📜 封盤記錄</div>
   </div>
 
   <!-- ① 使用者管理 -->
@@ -158,6 +159,43 @@
       <div id="rounds-msg" style="display:none; margin-top:12px"></div>
       <div style="margin-top:16px; display:none" id="rounds-btn-wrap">
         <button class="btn btn-primary" onclick="saveRounds()">💾 儲存封盤設定</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ⑤ 封盤記錄 -->
+  <div id="sec-logs" class="section">
+    <div class="card">
+      <div class="card-title">📜 封盤選隊記錄</div>
+      <div class="alert alert-info">
+        各輪封盤時產出的選隊記錄，可做為公正佐證。
+      </div>
+      <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:16px" id="log-round-tabs"></div>
+      <!-- 子頁籤：選隊記錄 / 積分記錄 -->
+      <div style="display:flex; gap:4px; margin-bottom:14px">
+        <div class="admin-tab active" id="logtab-picks"  onclick="switchLogTab('picks')" style="font-size:12px; padding:6px 12px">📋 選隊記錄</div>
+        <div class="admin-tab"       id="logtab-scores" onclick="switchLogTab('scores')" style="font-size:12px; padding:6px 12px">🏅 積分記錄</div>
+      </div>
+
+      <!-- 選隊記錄區 -->
+      <div id="log-sub-picks">
+        <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:12px" id="log-round-tabs"></div>
+        <div style="display:flex; gap:8px; margin-bottom:14px; flex-wrap:wrap" id="log-actions">
+          <button class="btn btn-teal btn-sm" onclick="sealLog(currentLogRound)">🔏 產出本輪封盤記錄</button>
+          <button class="btn btn-outline btn-sm" onclick="exportCSV()">⬇ 匯出 CSV</button>
+        </div>
+        <div id="logs-loading" style="display:none" class="loading"><div class="spinner"></div>載入中...</div>
+        <div id="logs-content"></div>
+      </div>
+
+      <!-- 積分記錄區 -->
+      <div id="log-sub-scores" style="display:none">
+        <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:12px" id="score-log-round-tabs"></div>
+        <div style="display:flex; gap:8px; margin-bottom:14px">
+          <button class="btn btn-outline btn-sm" onclick="exportScoreCSV()">⬇ 匯出 CSV</button>
+        </div>
+        <div id="score-logs-loading" style="display:none" class="loading"><div class="spinner"></div>載入中...</div>
+        <div id="score-logs-content"></div>
       </div>
     </div>
   </div>
@@ -226,11 +264,12 @@ window.doLogout = async () => { await signOut(auth); window.location.href = "ind
 // ─── 頁籤切換 ─────────────────────────────────────────
 window.switchTab = (tab) => {
   document.querySelectorAll(".admin-tab").forEach((el, i) => {
-    const tabs = ["users","rounds","results","calc"];
+    const tabs = ["users","rounds","results","calc","logs"];
     el.classList.toggle("active", tabs[i] === tab);
   });
   document.querySelectorAll(".section").forEach(el => el.classList.remove("active"));
   document.getElementById(`sec-${tab}`).classList.add("active");
+  if (tab === 'logs') initLogs();
 };
 
 // ═══════════════════════════════════════════════════════
@@ -637,6 +676,12 @@ function renderCalc() {
   document.getElementById("calc-content").innerHTML = html;
 }
 
+// 封盤初始化
+window.initLogs = function() {
+  if (document.getElementById('log-round-tabs').innerHTML !== '') return;
+  loadLogRoundTabs();
+};
+
 window.calcRound = async (n) => {
   const btn = document.getElementById(`calc-btn-${n}`);
   const msg = document.getElementById("calc-msg");
@@ -697,8 +742,39 @@ window.calcRound = async (n) => {
     }
 
     await batch.commit();
+
+    // 同步寫入 score_logs：記錄本次計算後每位使用者的總積分快照
+    const calcTime  = new Date();
+    const logBatch  = writeBatch(db);
+    // 重新讀取剛寫入的 scores 產出 log
+    const allScores = await getDocs(collection(db, "scores"));
+    const allUsers  = await getDocs(collection(db, "users"));
+    const userMap   = {};
+    allUsers.forEach(d => { if (d.id !== "_schema") userMap[d.id] = d.data(); });
+
+    allScores.forEach(d => {
+      const s   = d.data();
+      const u   = userMap[d.id] || {};
+      logBatch.set(doc(db, "score_logs", `${d.id}_round${n}`), {
+        uid:        d.id,
+        nickname:   u.nickname  || "",
+        email:      u.email     || "",
+        userType:   u.userType  || "player",
+        calcRound:  n,
+        round0:     s.round0 || 0,
+        round1:     s.round1 || 0,
+        round2:     s.round2 || 0,
+        round3:     s.round3 || 0,
+        round4:     s.round4 || 0,
+        round5:     s.round5 || 0,
+        total:      s.total  || 0,
+        calcAt:     calcTime
+      });
+    });
+    await logBatch.commit();
+
     msg.className   = "alert alert-success";
-    msg.textContent = `✓ 第 ${n} 輪積分計算完成！共計算 ${calcCount} 位使用者。`;
+    msg.textContent = `✓ 第 ${n} 輪積分計算完成！共計算 ${calcCount} 位使用者，積分記錄已儲存。`;
     msg.style.display = "block";
 
   } catch(e) {
@@ -710,6 +786,358 @@ window.calcRound = async (n) => {
   btn.disabled    = false;
   btn.textContent = "計算積分";
 };
+
+// ═══════════════════════════════════════════════════════
+// ⑤ 封盤記錄
+// ═══════════════════════════════════════════════════════
+let currentLogRound = 0;
+let currentLogData  = [];   // 目前顯示的 log 資料，供 CSV 匯出用
+
+function loadLogRoundTabs() {
+  const labels = ["小組賽","32強","16強","8強","4強","決賽"];
+  const wrap   = document.getElementById("log-round-tabs");
+  wrap.innerHTML = "";
+  for (let i = 0; i <= 5; i++) {
+    const btn = document.createElement("div");
+    btn.className = `admin-tab ${i === 0 ? "active":""}`;
+    btn.textContent = `第${i}輪 ${labels[i]}`;
+    btn.onclick = () => {
+      document.querySelectorAll("#log-round-tabs .admin-tab")
+        .forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+      currentLogRound = i;
+      loadLogContent(i);
+    };
+    wrap.appendChild(btn);
+  }
+  loadLogContent(0);
+}
+
+async function loadLogContent(n) {
+  document.getElementById("logs-loading").style.display = "block";
+  document.getElementById("logs-content").innerHTML     = "";
+  document.getElementById("log-actions").style.display  = "flex";
+
+  try {
+    const snap = await getDocs(collection(db, "logs"));
+    const logs = [];
+    snap.forEach(d => {
+      const data = d.data();
+      if (data.round === n) logs.push(data);
+    });
+    logs.sort((a, b) => (a.nickname || "").localeCompare(b.nickname || "", "zh-TW"));
+    currentLogData = logs;
+
+    document.getElementById("logs-loading").style.display = "none";
+
+    if (logs.length === 0) {
+      document.getElementById("logs-content").innerHTML = `
+        <div class="alert alert-warning">
+          本輪尚無封盤記錄，請按「🔏 產出本輪封盤記錄」產出。
+        </div>`;
+      return;
+    }
+
+    // 顯示 log 表格
+    const labels = ["小組賽","32強淘汰賽","16強淘汰賽","8強淘汰賽","4強淘汰賽","冠軍決賽"];
+    let html = `
+      <p style="font-size:12px; color:var(--text-sub); margin-bottom:10px">
+        第 ${n} 輪（${labels[n]}）封盤記錄，共 ${logs.length} 筆
+      </p>
+      <div style="overflow-x:auto">
+      <table class="table" style="font-size:12px">
+        <thead>
+          <tr>
+            <th>暱稱</th>
+            <th>選隊數</th>
+            <th>最後送出時間（台灣時間）</th>
+            <th>封盤記錄時間（台灣時間）</th>
+            <th style="min-width:200px">選擇隊伍</th>
+          </tr>
+        </thead>
+        <tbody>`;
+
+    logs.forEach(log => {
+      const submitted = log.submittedAt?.toDate
+        ? formatTW(log.submittedAt.toDate()) : "（未送出）";
+      const sealed = log.sealedAt?.toDate
+        ? formatTW(log.sealedAt.toDate()) : "—";
+      const teams = (log.teamNames || log.selectedTeams || []).join("、");
+      const hasData = log.selectedTeams && log.selectedTeams.length > 0;
+
+      html += `
+        <tr>
+          <td><strong>${log.nickname}</strong></td>
+          <td style="text-align:center">
+            ${hasData
+              ? `<span class="badge badge-teal">${log.selectedTeams.length}</span>`
+              : `<span class="badge badge-coral">0</span>`}
+          </td>
+          <td style="color:${hasData ? "var(--text)":"var(--coral)"}">
+            ${submitted}
+          </td>
+          <td style="color:var(--text-sub)">${sealed}</td>
+          <td style="font-size:11px; color:var(--text-sub); line-height:1.7">
+            ${hasData ? teams : '<span style="color:var(--coral)">封盤前未選隊</span>'}
+          </td>
+        </tr>`;
+    });
+
+    html += `</tbody></table></div>`;
+    document.getElementById("logs-content").innerHTML = html;
+
+  } catch(e) {
+    document.getElementById("logs-loading").style.display = "none";
+    document.getElementById("logs-content").innerHTML =
+      `<div class="alert alert-danger">❌ 載入失敗：${e.message}</div>`;
+  }
+}
+
+// 台灣時間格式化
+function formatTW(date) {
+  return date.toLocaleString("zh-TW", {
+    timeZone: "Asia/Taipei",
+    year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", second: "2-digit",
+    hour12: false
+  });
+}
+
+// 產出封盤記錄：快照所有使用者本輪的 picks 寫入 logs collection
+window.sealLog = async (n) => {
+  if (!confirm(`確定要產出第 ${n} 輪封盤記錄？此操作將覆蓋既有記錄。`)) return;
+
+  document.getElementById("logs-loading").style.display = "block";
+  document.getElementById("logs-content").innerHTML     = "";
+
+  try {
+    // 取得所有已審核使用者
+    const usersSnap = await getDocs(collection(db, "users"));
+    const users     = [];
+    usersSnap.forEach(d => {
+      if (d.id !== "_schema" && d.data().isApproved) users.push({ id: d.id, ...d.data() });
+    });
+
+    const sealedAt = new Date();
+    const batch    = writeBatch(db);
+
+    for (const u of users) {
+      const uid      = u.id;
+      const pickSnap = await getDoc(doc(db, "picks", `${uid}_${n}`));
+      const pickData = pickSnap.exists() ? pickSnap.data() : null;
+      const selected = pickData?.selectedTeams || [];
+
+      // 取得中文隊名
+      const teamNames = selected.map(id => {
+        const t = TEAMS.find(t => t.teamId === id);
+        return t ? t.nameCht : id;
+      });
+
+      batch.set(doc(db, "logs", `${n}_${uid}`), {
+        round:         n,
+        uid:           uid,
+        nickname:      u.nickname,
+        email:         u.email,
+        userType:      u.userType || "player",
+        selectedTeams: selected,
+        teamNames:     teamNames,
+        submittedAt:   pickData?.submittedAt || null,
+        sealedAt:      sealedAt
+      });
+    }
+
+    await batch.commit();
+    document.getElementById("logs-loading").style.display = "none";
+    await loadLogContent(n);
+
+  } catch(e) {
+    document.getElementById("logs-loading").style.display = "none";
+    document.getElementById("logs-content").innerHTML =
+      `<div class="alert alert-danger">❌ 產出失敗：${e.message}</div>`;
+  }
+};
+
+// 匯出 CSV
+window.exportCSV = () => {
+  if (!currentLogData || currentLogData.length === 0) {
+    alert("目前沒有記錄可匯出。"); return;
+  }
+  const labels = ["小組賽","32強淘汰賽","16強淘汰賽","8強淘汰賽","4強淘汰賽","冠軍決賽"];
+  const n      = currentLogRound;
+
+  // BOM for UTF-8 Excel 相容
+  let csv = "\uFEFF";
+  csv += `2026世界盃足球輪盤盟主賽 — 第${n}輪（${labels[n]}）封盤選隊記錄\n`;
+  csv += `產出時間,${formatTW(new Date())}\n\n`;
+  csv += "暱稱,Email,使用者類型,選隊數,最後送出時間,封盤記錄時間,選擇隊伍\n";
+
+  currentLogData.forEach(log => {
+    const submitted = log.submittedAt?.toDate ? formatTW(log.submittedAt.toDate()) : "未送出";
+    const sealed    = log.sealedAt?.toDate    ? formatTW(log.sealedAt.toDate())    : "";
+    const teams     = (log.teamNames || []).join(" | ");
+    const type      = log.userType === "trial" ? "試用者" : "參賽者";
+    const cnt       = log.selectedTeams?.length || 0;
+    csv += `"${log.nickname}","${log.email}","${type}","${cnt}","${submitted}","${sealed}","${teams}"\n`;
+  });
+
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement("a");
+  a.href     = url;
+  a.download = `FIFA2026_第${n}輪_封盤記錄_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+};
+
+
+// ─── 封盤記錄子頁籤切換 ───────────────────────────────
+let currentScoreLogRound = 0;
+let currentScoreLogData  = [];
+
+window.switchLogTab = (tab) => {
+  document.getElementById("logtab-picks").classList.toggle("active",  tab === "picks");
+  document.getElementById("logtab-scores").classList.toggle("active", tab === "scores");
+  document.getElementById("log-sub-picks").style.display  = tab === "picks"  ? "block" : "none";
+  document.getElementById("log-sub-scores").style.display = tab === "scores" ? "block" : "none";
+  if (tab === "scores" && document.getElementById("score-log-round-tabs").innerHTML === "") {
+    loadScoreLogRoundTabs();
+  }
+};
+
+// ─── 積分記錄：輪次頁籤 ───────────────────────────────
+function loadScoreLogRoundTabs() {
+  const labels = ["小組賽","32強","16強","8強","4強","決賽"];
+  const wrap   = document.getElementById("score-log-round-tabs");
+  wrap.innerHTML = "";
+  for (let i = 0; i <= 5; i++) {
+    const btn = document.createElement("div");
+    btn.className = `admin-tab ${i === 0 ? "active":""}`;
+    btn.textContent = `第${i}輪 ${labels[i]}`;
+    btn.onclick = () => {
+      document.querySelectorAll("#score-log-round-tabs .admin-tab")
+        .forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+      currentScoreLogRound = i;
+      loadScoreLogContent(i);
+    };
+    wrap.appendChild(btn);
+  }
+  loadScoreLogContent(0);
+}
+
+// ─── 積分記錄：內容顯示 ───────────────────────────────
+async function loadScoreLogContent(n) {
+  document.getElementById("score-logs-loading").style.display = "block";
+  document.getElementById("score-logs-content").innerHTML     = "";
+
+  try {
+    const snap = await getDocs(collection(db, "score_logs"));
+    const logs = [];
+    snap.forEach(d => {
+      const data = d.data();
+      if (data.calcRound === n) logs.push(data);
+    });
+    // 依總積分降冪排列
+    logs.sort((a, b) => (b.total || 0) - (a.total || 0));
+    currentScoreLogData  = logs;
+    currentScoreLogRound = n;
+
+    document.getElementById("score-logs-loading").style.display = "none";
+
+    if (logs.length === 0) {
+      document.getElementById("score-logs-content").innerHTML = `
+        <div class="alert alert-warning">
+          本輪尚無積分記錄，請先執行「🧮 積分計算」。
+        </div>`;
+      return;
+    }
+
+    const labels  = ["小組賽","32強淘汰賽","16強淘汰賽","8強淘汰賽","4強淘汰賽","冠軍決賽"];
+    const calcAt  = logs[0].calcAt?.toDate ? formatTW(logs[0].calcAt.toDate()) : "—";
+
+    let html = `
+      <p style="font-size:12px; color:var(--text-sub); margin-bottom:10px">
+        第 ${n} 輪（${labels[n]}）積分計算記錄，共 ${logs.length} 筆 ／ 計算時間：${calcAt}
+      </p>
+      <div style="overflow-x:auto">
+      <table class="table" style="font-size:12px">
+        <thead>
+          <tr>
+            <th style="text-align:center">名次</th>
+            <th>暱稱</th>
+            <th style="text-align:right">總積分</th>
+            <th style="text-align:right">小組賽</th>
+            <th style="text-align:right">第1輪</th>
+            <th style="text-align:right">第2輪</th>
+            <th style="text-align:right">第3輪</th>
+            <th style="text-align:right">第4輪</th>
+            <th style="text-align:right">第5輪</th>
+            <th>計算時間</th>
+          </tr>
+        </thead>
+        <tbody>`;
+
+    logs.forEach((log, i) => {
+      const rankIcon = i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : i + 1;
+      const calcTime = log.calcAt?.toDate ? formatTW(log.calcAt.toDate()) : "—";
+      const type     = log.userType === "trial"
+        ? `<span class="badge badge-amber" style="font-size:10px">試用</span>` : "";
+      html += `
+        <tr>
+          <td style="text-align:center">${rankIcon}</td>
+          <td><strong>${log.nickname}</strong>${type}</td>
+          <td style="text-align:right; font-weight:500; color:var(--primary)">${log.total}</td>
+          <td style="text-align:right; color:var(--text-sub)">${log.round0 || "—"}</td>
+          <td style="text-align:right; color:var(--text-sub)">${log.round1 || "—"}</td>
+          <td style="text-align:right; color:var(--text-sub)">${log.round2 || "—"}</td>
+          <td style="text-align:right; color:var(--text-sub)">${log.round3 || "—"}</td>
+          <td style="text-align:right; color:var(--text-sub)">${log.round4 || "—"}</td>
+          <td style="text-align:right; color:var(--text-sub)">${log.round5 || "—"}</td>
+          <td style="color:var(--text-sub); font-size:11px">${calcTime}</td>
+        </tr>`;
+    });
+
+    html += `</tbody></table></div>`;
+    document.getElementById("score-logs-content").innerHTML = html;
+
+  } catch(e) {
+    document.getElementById("score-logs-loading").style.display = "none";
+    document.getElementById("score-logs-content").innerHTML =
+      `<div class="alert alert-danger">❌ 載入失敗：${e.message}</div>`;
+  }
+}
+
+// ─── 積分記錄匯出 CSV ─────────────────────────────────
+window.exportScoreCSV = () => {
+  if (!currentScoreLogData || currentScoreLogData.length === 0) {
+    alert("目前沒有積分記錄可匯出。"); return;
+  }
+  const labels  = ["小組賽","32強淘汰賽","16強淘汰賽","8強淘汰賽","4強淘汰賽","冠軍決賽"];
+  const n       = currentScoreLogRound;
+  const calcAt  = currentScoreLogData[0]?.calcAt?.toDate
+    ? formatTW(currentScoreLogData[0].calcAt.toDate()) : "";
+
+  let csv = "\uFEFF";
+  csv += `2026世界盃足球輪盤盟主賽 — 第${n}輪（${labels[n]}）積分計算記錄\n`;
+  csv += `計算時間,${calcAt}\n`;
+  csv += `產出時間,${formatTW(new Date())}\n\n`;
+  csv += "名次,暱稱,使用者類型,總積分,小組賽,第1輪,第2輪,第3輪,第4輪,第5輪,計算時間\n";
+
+  currentScoreLogData.forEach((log, i) => {
+    const type    = log.userType === "trial" ? "試用者" : "參賽者";
+    const calcTime= log.calcAt?.toDate ? formatTW(log.calcAt.toDate()) : "";
+    csv += `"${i+1}","${log.nickname}","${type}","${log.total}","${log.round0||0}","${log.round1||0}","${log.round2||0}","${log.round3||0}","${log.round4||0}","${log.round5||0}","${calcTime}"\n`;
+  });
+
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement("a");
+  a.href     = url;
+  a.download = `FIFA2026_第${n}輪_積分記錄_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+};
+
 </script>
 
 </body>
