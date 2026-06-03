@@ -5,20 +5,29 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>2026世界盃足球輪盤盟主賽</title>
   <link rel="stylesheet" href="css/style.css">
+  <style>
+    .trial-banner {
+      background: linear-gradient(135deg, #FAEEDA, #FFF3CD);
+      border: 1.5px solid #EF9F27;
+      border-radius: var(--radius-lg);
+      padding: 12px 16px;
+      margin-bottom: 16px;
+      display: flex; align-items: center; gap: 10px;
+    }
+    .trial-banner .icon { font-size: 22px; flex-shrink:0; }
+    .trial-banner .text { font-size: 13px; color: #633806; line-height: 1.5; }
+    .trial-banner strong { font-weight: 500; }
+  </style>
 </head>
 <body>
 
-<!-- 導覽列 -->
 <nav class="navbar">
-  <div class="navbar-brand">
-    <span class="flag">⚽</span>
-    <span>2026 輪盤盟主賽</span>
-  </div>
+  <div class="navbar-brand"><span class="flag">⚽</span><span>2026 輪盤盟主賽</span></div>
   <div class="navbar-nav">
     <span class="navbar-user" id="nav-nickname"></span>
-    <a href="main.html"    class="active"><span>🏆</span> 排行榜</a>
-    <a href="pick.html"           ><span>🎯</span> 選隊</a>
-    <a href="profile.html"        ><span>👤</span> 設定</a>
+    <a href="main.html" class="active"><span>🏆</span> 排行榜</a>
+    <a href="pick.html"><span>🎯</span> 選隊</a>
+    <a href="profile.html"><span>👤</span> 設定</a>
     <a href="admin.html" id="nav-admin" style="display:none"><span>⚙️</span> 管理</a>
     <a href="#" onclick="doLogout()"><span>🚪</span> 登出</a>
   </div>
@@ -26,19 +35,27 @@
 
 <div class="container">
 
+  <!-- 試用模式提示橫幅 -->
+  <div class="trial-banner" id="trial-banner" style="display:none">
+    <div class="icon">🧪</div>
+    <div class="text">
+      <strong>目前為試用模式</strong> — 現在的選隊與積分僅供練習，不列入正式記錄。
+      正式開賽後，管理員將切換為正式模式，屆時重新選隊的結果才算正式積分。
+    </div>
+  </div>
+
   <!-- 標題列 -->
   <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; flex-wrap:wrap; gap:10px">
     <div>
-      <h2 style="font-size:17px; font-weight:500">🏆 積分排行榜</h2>
+      <h2 style="font-size:17px; font-weight:500">
+        🏆 積分排行榜
+        <span id="mode-badge" style="display:none"></span>
+      </h2>
       <p style="font-size:12px; color:var(--text-sub); margin-top:2px" id="last-updated"></p>
     </div>
     <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap">
-      <button class="btn btn-outline btn-sm" id="btn-trial" onclick="toggleTrial()">
-        ＋ 顯示試用者
-      </button>
-      <span style="font-size:12px; color:var(--text-sub)">
-        共 <span id="total-count">0</span> 位參賽者
-      </span>
+      <button class="btn btn-outline btn-sm" id="btn-trial" onclick="toggleTrial()">＋ 顯示試用者</button>
+      <span style="font-size:12px; color:var(--text-sub)">共 <span id="total-count">0</span> 位參賽者</span>
     </div>
   </div>
 
@@ -53,9 +70,7 @@
 
   <!-- 排行榜表格 -->
   <div class="card" style="padding:0; overflow:hidden">
-    <div id="loading" class="loading">
-      <div class="spinner"></div>載入排行榜中...
-    </div>
+    <div id="loading" class="loading"><div class="spinner"></div>載入排行榜中...</div>
     <div id="table-wrap" style="display:none; overflow-x:auto">
       <table class="table" id="score-table">
         <thead>
@@ -74,16 +89,14 @@
         <tbody id="score-tbody"></tbody>
       </table>
     </div>
-    <div id="empty-msg" style="display:none" class="loading">
-      尚無積分資料，比賽開始後將顯示排行榜。
-    </div>
+    <div id="empty-msg" style="display:none" class="loading">尚無積分資料，比賽開始後將顯示排行榜。</div>
   </div>
 
   <!-- 基準分說明 -->
   <div class="card" style="margin-top:8px">
     <div class="card-title" style="margin-bottom:10px">📊 基準分（Weighting）說明</div>
     <div style="display:flex; gap:10px; flex-wrap:wrap; font-size:13px">
-      <span><span class="weighting-dot w1" style="display:inline-flex">1</span> 熱門強隊（排名前段）</span>
+      <span><span class="weighting-dot w1" style="display:inline-flex">1</span> 熱門強隊</span>
       <span><span class="weighting-dot w2" style="display:inline-flex">2</span> 次強隊</span>
       <span><span class="weighting-dot w3" style="display:inline-flex">3</span> 中等隊伍</span>
       <span><span class="weighting-dot w4" style="display:inline-flex">4</span> 黑馬弱隊</span>
@@ -92,176 +105,145 @@
       積分 ＝ 基準分 × 加乘倍數（第1輪×1、第2輪×2、...、第5輪×5）
     </p>
   </div>
-
 </div>
 
 <script type="module">
 import { auth, db } from "./js/firebase-config.js";
-import {
-  onAuthStateChanged, signOut
-} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
-import {
-  collection, getDocs, doc, getDoc, query, orderBy
-} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+import { collection, getDocs, doc, getDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
-let currentUser  = null;
-let allRows      = [];       // 全部資料（含試用者）
-let showTrial    = false;
-let sortKey      = "total";
-let sortAsc      = false;
+let currentUser = null;
+let allRows     = [];
+let showTrial   = false;
+let sortKey     = "total";
+let sortAsc     = false;
+let sysMode     = "trial";   // "trial" | "live"
 
-// ─── 認證檢查 ─────────────────────────────────────────
 onAuthStateChanged(auth, async (user) => {
   if (!user) { window.location.href = "index.html"; return; }
   const snap = await getDoc(doc(db, "users", user.uid));
-  if (!snap.exists() || !snap.data().isApproved) {
-    await signOut(auth); window.location.href = "index.html"; return;
-  }
-  currentUser = { ...snap.data(), uid: user.uid };  // 強制用 Auth UID
+  if (!snap.exists() || !snap.data().isApproved) { await signOut(auth); window.location.href = "index.html"; return; }
+  currentUser = { ...snap.data(), uid: user.uid };
   document.getElementById("nav-nickname").textContent = currentUser.nickname;
-  if (currentUser.isAdmin) {
-    document.getElementById("nav-admin").style.display = "inline-flex";
-  }
+  if (currentUser.isAdmin) document.getElementById("nav-admin").style.display = "inline-flex";
+  await loadMode();
   loadScores();
 });
 
-// ─── 登出 ─────────────────────────────────────────────
-window.doLogout = async () => {
-  await signOut(auth);
-  window.location.href = "index.html";
-};
+window.doLogout = async () => { await signOut(auth); window.location.href = "index.html"; };
 
-// ─── 載入積分 ─────────────────────────────────────────
+// ─── 讀取系統模式 ─────────────────────────────────────
+async function loadMode() {
+  const snap = await getDoc(doc(db, "settings", "system"));
+  sysMode    = snap.exists() ? (snap.data().mode || "trial") : "trial";
+
+  // 試用模式顯示橫幅
+  document.getElementById("trial-banner").style.display = sysMode === "trial" ? "flex" : "none";
+
+  // 標題旁顯示模式徽章
+  const badge = document.getElementById("mode-badge");
+  if (sysMode === "trial") {
+    badge.innerHTML = `<span class="badge badge-amber" style="font-size:11px; vertical-align:middle; margin-left:6px">🧪 試用模式</span>`;
+    badge.style.display = "inline";
+  } else {
+    badge.innerHTML = `<span class="badge badge-teal" style="font-size:11px; vertical-align:middle; margin-left:6px">🟢 正式模式</span>`;
+    badge.style.display = "inline";
+  }
+}
+
+// ─── 載入積分（依模式讀取不同 collection）────────────
 async function loadScores() {
+  const scoreCol = sysMode === "trial" ? "scores_trial" : "scores";
   try {
-    // 取得所有使用者
     const usersSnap  = await getDocs(collection(db, "users"));
-    const scoresSnap = await getDocs(collection(db, "scores"));
-
-    // 建立 scores map
-    const scoresMap = {};
+    const scoresSnap = await getDocs(collection(db, scoreCol));
+    const scoresMap  = {};
     scoresSnap.forEach(d => { scoresMap[d.id] = d.data(); });
 
-    // 組合資料
     allRows = [];
     usersSnap.forEach(d => {
       const u = d.data();
-      if (u.uid === "_schema" || !u.isApproved) return;  // 略過說明文件及未審核
-      const s = scoresMap[u.uid] || {};
+      if (d.id === "_schema" || !u.isApproved) return;
+      const s = scoresMap[u.uid || d.id] || {};
       allRows.push({
-        uid:      u.uid,
-        nickname: u.nickname,
+        uid: u.uid || d.id, nickname: u.nickname,
         userType: u.userType || "player",
-        total:    s.total  || 0,
-        round0:   s.round0 || 0,
-        round1:   s.round1 || 0,
-        round2:   s.round2 || 0,
-        round3:   s.round3 || 0,
-        round4:   s.round4 || 0,
-        round5:   s.round5 || 0,
+        total:  s.total  || 0, round0: s.round0 || 0,
+        round1: s.round1 || 0, round2: s.round2 || 0,
+        round3: s.round3 || 0, round4: s.round4 || 0,
+        round5: s.round5 || 0,
       });
     });
 
     document.getElementById("last-updated").textContent =
+      (sysMode === "trial" ? "【試用】" : "") +
       "更新時間：" + new Date().toLocaleString("zh-TW", { timeZone: "Asia/Taipei" });
-
     renderTable();
-
-  } catch (e) {
-    document.getElementById("loading").innerHTML =
-      `<p style="color:var(--coral)">載入失敗：${e.message}</p>`;
+  } catch(e) {
+    document.getElementById("loading").innerHTML = `<p style="color:var(--coral)">載入失敗：${e.message}</p>`;
   }
 }
 
-// ─── 渲染表格 ─────────────────────────────────────────
 function renderTable() {
-  // 過濾試用者
-  let rows = showTrial
-    ? allRows
-    : allRows.filter(r => r.userType === "player");
-
+  let rows = showTrial ? allRows : allRows.filter(r => r.userType === "player");
   document.getElementById("total-count").textContent = rows.length;
-
-  // 排序
-  rows.sort((a, b) => {
+  rows.sort((a,b) => {
     let va = a[sortKey], vb = b[sortKey];
-    if (typeof va === "string") va = va.localeCompare(vb, "zh-TW");
-    else va = va - vb;
+    if (typeof va === "string") va = va.localeCompare(vb, "zh-TW"); else va = va - vb;
     return sortAsc ? va : -va;
   });
-
-  // 指定排名
   let rank = 1;
-  rows.forEach((r, i) => {
-    r._rank = (i > 0 && rows[i-1].total === r.total && rows[i-1]._rank)
-      ? rows[i-1]._rank  // 同分同名次
-      : rank;
-    rank = i + 1 + 1;
+  rows.forEach((r,i) => {
+    r._rank = (i>0 && rows[i-1].total===r.total && rows[i-1]._rank) ? rows[i-1]._rank : rank;
+    rank = i+2;
   });
-
   const tbody = document.getElementById("score-tbody");
   tbody.innerHTML = "";
-
   if (rows.length === 0) {
     document.getElementById("loading").style.display    = "none";
     document.getElementById("table-wrap").style.display = "none";
     document.getElementById("empty-msg").style.display  = "block";
     return;
   }
-
   rows.forEach(r => {
-    const isSelf = currentUser && r.uid === currentUser.uid;
-    const rankClass = r._rank === 1 ? "rank-1" : r._rank === 2 ? "rank-2" : r._rank === 3 ? "rank-3" : "";
-    const rankIcon  = r._rank === 1 ? "🥇" : r._rank === 2 ? "🥈" : r._rank === 3 ? "🥉" : r._rank;
-    const trialBadge = r.userType === "trial"
-      ? `<span class="badge badge-amber" style="font-size:10px; margin-left:4px">試用</span>` : "";
-    const selfStyle = isSelf ? "background:var(--primary-light);" : "";
-
+    const isSelf    = currentUser && r.uid === currentUser.uid;
+    const rankClass = r._rank===1?"rank-1":r._rank===2?"rank-2":r._rank===3?"rank-3":"";
+    const rankIcon  = r._rank===1?"🥇":r._rank===2?"🥈":r._rank===3?"🥉":r._rank;
+    const trialBadge= r.userType==="trial"?`<span class="badge badge-amber" style="font-size:10px;margin-left:4px">試用</span>`:"";
     tbody.innerHTML += `
-      <tr style="${selfStyle}">
+      <tr style="${isSelf?"background:var(--primary-light);":""}">
         <td style="text-align:center" class="${rankClass}">${rankIcon}</td>
-        <td>
-          ${r.nickname}${trialBadge}
-          ${isSelf ? `<span style="font-size:10px; color:var(--primary); margin-left:4px">（我）</span>` : ""}
-        </td>
-        <td style="text-align:right; font-weight:500; color:var(--primary)">${r.total}</td>
-        <td style="text-align:right; color:var(--text-sub)">${r.round0 || "—"}</td>
-        <td style="text-align:right; color:var(--text-sub)">${r.round1 || "—"}</td>
-        <td style="text-align:right; color:var(--text-sub)">${r.round2 || "—"}</td>
-        <td style="text-align:right; color:var(--text-sub)">${r.round3 || "—"}</td>
-        <td style="text-align:right; color:var(--text-sub)">${r.round4 || "—"}</td>
-        <td style="text-align:right; color:var(--text-sub)">${r.round5 || "—"}</td>
+        <td>${r.nickname}${trialBadge}${isSelf?`<span style="font-size:10px;color:var(--primary);margin-left:4px">（我）</span>`:""}</td>
+        <td style="text-align:right;font-weight:500;color:var(--primary)">${r.total}</td>
+        <td style="text-align:right;color:var(--text-sub)">${r.round0||"—"}</td>
+        <td style="text-align:right;color:var(--text-sub)">${r.round1||"—"}</td>
+        <td style="text-align:right;color:var(--text-sub)">${r.round2||"—"}</td>
+        <td style="text-align:right;color:var(--text-sub)">${r.round3||"—"}</td>
+        <td style="text-align:right;color:var(--text-sub)">${r.round4||"—"}</td>
+        <td style="text-align:right;color:var(--text-sub)">${r.round5||"—"}</td>
       </tr>`;
   });
-
   document.getElementById("loading").style.display    = "none";
   document.getElementById("table-wrap").style.display = "block";
   document.getElementById("empty-msg").style.display  = "none";
 }
 
-// ─── 排序 ─────────────────────────────────────────────
 window.sortBy = (key) => {
-  if (sortKey === key) {
-    sortAsc = !sortAsc;
-  } else {
-    sortKey = key;
-    sortAsc = key === "nickname";  // 文字欄位預設升冪，數字欄位預設降冪
-  }
-  // 更新表頭樣式
+  sortAsc = sortKey === key ? !sortAsc : key === "nickname";
+  sortKey = key;
   document.querySelectorAll(".table th").forEach(th => {
     th.classList.remove("sorted");
     th.textContent = th.textContent.replace(/ [▲▼]$/, "");
   });
-  const ths = document.querySelectorAll(".table th");
-  const keyMap = { rank:0, nickname:1, total:2, round0:3, round1:4, round2:5, round3:6, round4:7, round5:8 };
-  if (keyMap[key] !== undefined) {
+  const keyMap = {rank:0,nickname:1,total:2,round0:3,round1:4,round2:5,round3:6,round4:7,round5:8};
+  const ths    = document.querySelectorAll(".table th");
+  if (keyMap[key]!==undefined) {
     ths[keyMap[key]].classList.add("sorted");
-    ths[keyMap[key]].textContent += sortAsc ? " ▲" : " ▼";
+    ths[keyMap[key]].textContent += sortAsc?" ▲":" ▼";
   }
   renderTable();
 };
 
-// ─── 切換試用者 ───────────────────────────────────────
 window.toggleTrial = () => {
   showTrial = !showTrial;
   const btn = document.getElementById("btn-trial");
@@ -270,6 +252,5 @@ window.toggleTrial = () => {
   renderTable();
 };
 </script>
-
 </body>
 </html>

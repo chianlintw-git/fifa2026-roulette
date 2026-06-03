@@ -149,6 +149,30 @@
 
   <!-- ② 封盤設定 -->
   <div id="sec-rounds" class="section">
+    <!-- 系統模式切換 -->
+    <div class="card" id="mode-card">
+      <div class="card-title">🎛️ 系統模式</div>
+      <div id="mode-loading" class="loading" style="padding:20px 0"><div class="spinner"></div>載入中...</div>
+      <div id="mode-content" style="display:none">
+        <div style="display:flex; align-items:center; gap:16px; flex-wrap:wrap">
+          <div>
+            <p style="font-size:13px; color:var(--text-sub); margin-bottom:4px">目前模式</p>
+            <span id="current-mode-badge" style="font-size:15px; font-weight:500"></span>
+          </div>
+          <div style="flex:1; min-width:200px">
+            <p style="font-size:12px; color:var(--text-sub); line-height:1.6" id="mode-desc"></p>
+          </div>
+          <button class="btn btn-primary" id="btn-switch-mode" onclick="switchMode()"></button>
+        </div>
+        <div style="margin-top:12px; padding:10px 14px; background:var(--bg2); border-radius:var(--radius); font-size:12px; color:var(--text-sub); line-height:1.7">
+          <strong>試用模式</strong>：選隊存入 picks_trial，積分存入 scores_trial，排行榜顯示「試用中」標示。<br>
+          <strong>正式模式</strong>：選隊存入 picks，積分存入 scores，為正式比賽記錄。<br>
+          ⚠ 切換至正式模式後，試用資料保留但不影響正式記錄；切換回試用模式需謹慎。
+        </div>
+      </div>
+      <div id="mode-msg" style="display:none; margin-top:10px"></div>
+    </div>
+
     <div class="card">
       <div class="card-title">🔒 各輪封盤時間設定</div>
       <div class="alert alert-info">
@@ -337,8 +361,63 @@ window.toggleAdmin = async (uid, makeAdmin) => {
 };
 
 // ═══════════════════════════════════════════════════════
-// ② 封盤設定
+// ② 封盤設定 + 系統模式
 // ═══════════════════════════════════════════════════════
+async function loadMode() {
+  try {
+    const snap    = await getDoc(doc(db, "settings", "system"));
+    const mode    = snap.exists() ? (snap.data().mode || "trial") : "trial";
+    const isLive  = mode === "live";
+
+    document.getElementById("current-mode-badge").innerHTML = isLive
+      ? `<span class="badge badge-teal" style="font-size:13px">🟢 正式模式</span>`
+      : `<span class="badge badge-amber" style="font-size:13px">🧪 試用模式</span>`;
+
+    document.getElementById("mode-desc").textContent = isLive
+      ? "目前為正式模式，使用者的選隊與積分均列入正式記錄。"
+      : "目前為試用模式，使用者可練習選隊但不計入正式記錄。確認正式開賽後，請切換為正式模式。";
+
+    const btn = document.getElementById("btn-switch-mode");
+    btn.textContent  = isLive ? "🔄 切回試用模式" : "🚀 切換為正式模式";
+    btn.className    = isLive ? "btn btn-outline" : "btn btn-primary";
+
+    document.getElementById("mode-loading").style.display  = "none";
+    document.getElementById("mode-content").style.display  = "block";
+  } catch(e) {
+    document.getElementById("mode-loading").innerHTML =
+      `<p style="color:var(--coral); font-size:13px">載入失敗：${e.message}</p>`;
+  }
+}
+
+window.switchMode = async () => {
+  const snap   = await getDoc(doc(db, "settings", "system"));
+  const curMode= snap.exists() ? (snap.data().mode || "trial") : "trial";
+  const newMode= curMode === "trial" ? "live" : "trial";
+  const msg    = document.getElementById("mode-msg");
+
+  const confirmText = newMode === "live"
+    ? "確定切換為【正式模式】？\n切換後，使用者的選隊與積分將列入正式記錄。\n試用資料將保留但不影響正式記錄。"
+    : "確定切回【試用模式】？\n正式記錄資料將保留，但使用者介面會顯示試用提示。";
+
+  if (!confirm(confirmText)) return;
+
+  try {
+    await setDoc(doc(db, "settings", "system"), {
+      mode: newMode,
+      liveStartAt: newMode === "live" ? new Date() : null,
+      _note: "mode: trial=試用模式 / live=正式模式"
+    });
+    msg.className   = "alert alert-success";
+    msg.textContent = `✓ 已切換為${newMode==="live"?"正式":"試用"}模式！`;
+    msg.style.display = "block";
+    setTimeout(() => { msg.style.display="none"; loadMode(); }, 2000);
+  } catch(e) {
+    msg.className   = "alert alert-danger";
+    msg.textContent = "❌ 切換失敗：" + e.message;
+    msg.style.display = "block";
+  }
+};
+
 async function loadRounds() {
   const snap   = await getDocs(collection(db, "rounds"));
   const rounds = [];
@@ -737,17 +816,22 @@ window.calcRound = async (n) => {
         updated.round0 + updated.round1 + updated.round2 +
         updated.round3 + updated.round4 + updated.round5;
 
-      batch.set(doc(db, "scores", uid), updated);
+      batch.set(doc(db, scoreCol, uid), updated);
       calcCount++;
     }
 
     await batch.commit();
 
+    // 依模式決定 scores collection
+    const sysSnap  = await getDoc(doc(db, "settings", "system"));
+    const sysMode  = sysSnap.exists() ? (sysSnap.data().mode || "trial") : "trial";
+    const scoreCol = sysMode === "trial" ? "scores_trial" : "scores";
+
     // 同步寫入 score_logs：記錄本次計算後每位使用者的總積分快照
     const calcTime  = new Date();
     const logBatch  = writeBatch(db);
     // 重新讀取剛寫入的 scores 產出 log
-    const allScores = await getDocs(collection(db, "scores"));
+    const allScores = await getDocs(collection(db, scoreCol));
     const allUsers  = await getDocs(collection(db, "users"));
     const userMap   = {};
     allUsers.forEach(d => { if (d.id !== "_schema") userMap[d.id] = d.data(); });
