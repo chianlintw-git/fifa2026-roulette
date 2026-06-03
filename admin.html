@@ -115,6 +115,7 @@
   <!-- 管理頁籤 -->
   <div class="admin-tabs">
     <div class="admin-tab active" onclick="switchTab('users')">👥 使用者管理</div>
+    <div class="admin-tab"       onclick="switchTab('mode')">🎛️ 系統模式</div>
     <div class="admin-tab"       onclick="switchTab('rounds')">🔒 封盤設定</div>
     <div class="admin-tab"       onclick="switchTab('results')">📋 比賽結果</div>
     <div class="admin-tab"       onclick="switchTab('calc')">🧮 積分計算</div>
@@ -147,10 +148,9 @@
     </div>
   </div>
 
-  <!-- ② 封盤設定 -->
-  <div id="sec-rounds" class="section">
-    <!-- 系統模式切換 -->
-    <div class="card" id="mode-card">
+  <!-- ② 系統模式 -->
+  <div id="sec-mode" class="section">
+    <div class="card">
       <div class="card-title">🎛️ 系統模式</div>
       <div id="mode-loading" class="loading" style="padding:20px 0"><div class="spinner"></div>載入中...</div>
       <div id="mode-content" style="display:none">
@@ -172,7 +172,10 @@
       </div>
       <div id="mode-msg" style="display:none; margin-top:10px"></div>
     </div>
+  </div>
 
+  <!-- ③ 封盤設定 -->
+  <div id="sec-rounds" class="section">
     <div class="card">
       <div class="card-title">🔒 各輪封盤時間設定</div>
       <div class="alert alert-info">
@@ -288,12 +291,13 @@ window.doLogout = async () => { await signOut(auth); window.location.href = "ind
 // ─── 頁籤切換 ─────────────────────────────────────────
 window.switchTab = (tab) => {
   document.querySelectorAll(".admin-tab").forEach((el, i) => {
-    const tabs = ["users","rounds","results","calc","logs"];
+    const tabs = ["users","mode","rounds","results","calc","logs"];
     el.classList.toggle("active", tabs[i] === tab);
   });
   document.querySelectorAll(".section").forEach(el => el.classList.remove("active"));
   document.getElementById(`sec-${tab}`).classList.add("active");
   if (tab === 'logs') initLogs();
+  if (tab === 'mode') loadMode();
 };
 
 // ═══════════════════════════════════════════════════════
