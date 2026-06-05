@@ -110,7 +110,7 @@
   </div>
 </nav>
 
-<div class="container" id="admin-container">
+<div class="container" id="admin-container" style="padding-bottom:70px">
 
   <!-- 管理頁籤 -->
   <div class="admin-tabs">
@@ -255,11 +255,11 @@
 
 </div>
 
-<!-- 比賽結果 sticky 進度列（container 外，固定在視窗底部）-->
+<!-- 比賽結果 sticky 進度列 -->
 <div id="result-sticky-footer" class="sticky-footer" style="display:none">
-  <div style="display:flex; flex-direction:column; gap:3px">
+  <div style="display:flex; flex-direction:column; gap:4px">
     <div style="display:flex; align-items:center; gap:10px">
-      <span id="result-progress-label" style="font-size:13px; font-weight:500"></span>
+      <span id="result-progress-label" style="font-size:13px; font-weight:500; color:var(--text-sub)"></span>
       <div style="width:120px; height:6px; background:var(--border); border-radius:10px; overflow:hidden">
         <div id="result-progress-bar" style="height:100%; width:0%; background:var(--primary); border-radius:10px; transition:width .2s"></div>
       </div>
