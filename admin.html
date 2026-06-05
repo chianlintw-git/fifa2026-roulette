@@ -105,7 +105,7 @@
     <a href="main.html">🏆 排行榜</a>
     <a href="pick.html">🎯 選隊</a>
     <a href="profile.html">👤 設定</a>
-    <a href="admin.html" class="active">⚙️ 管理</a>
+    <a href="admin.html" id="nav-admin" class="active">⚙️ 管理</a>
     <a href="#" onclick="doLogout()">🚪 登出</a>
   </div>
 </nav>
@@ -190,6 +190,32 @@
     </div>
   </div>
 
+  <!-- ③ 比賽結果 -->
+  <div id="sec-results" class="section">
+    <div class="card">
+      <div class="card-title">📋 比賽結果設定</div>
+
+      <!-- 輪次選擇 -->
+      <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:16px" id="result-round-tabs"></div>
+
+      <div id="results-loading" class="loading"><div class="spinner"></div>載入中...</div>
+      <div id="results-content" style="display:none"></div>
+      <div id="results-msg" style="display:none; margin-top:12px"></div>
+    </div>
+  </div>
+
+  <!-- ④ 積分計算 -->
+  <div id="sec-calc" class="section">
+    <div class="card">
+      <div class="card-title">🧮 積分計算</div>
+      <div class="alert alert-warning">
+        請確認各輪比賽結果已正確設定後，再執行積分計算。計算後結果將覆蓋舊積分。
+      </div>
+      <div id="calc-content"></div>
+      <div id="calc-msg" style="display:none; margin-top:12px"></div>
+    </div>
+  </div>
+
   <!-- ⑤ 封盤記錄 -->
   <div id="sec-logs" class="section">
     <div class="card">
@@ -224,32 +250,6 @@
         <div id="score-logs-loading" style="display:none" class="loading"><div class="spinner"></div>載入中...</div>
         <div id="score-logs-content"></div>
       </div>
-    </div>
-  </div>
-
-  <!-- ③ 比賽結果 -->
-  <div id="sec-results" class="section">
-    <div class="card">
-      <div class="card-title">📋 比賽結果設定</div>
-
-      <!-- 輪次選擇 -->
-      <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:16px" id="result-round-tabs"></div>
-
-      <div id="results-loading" class="loading"><div class="spinner"></div>載入中...</div>
-      <div id="results-content" style="display:none"></div>
-      <div id="results-msg" style="display:none; margin-top:12px"></div>
-    </div>
-  </div>
-
-  <!-- ④ 積分計算 -->
-  <div id="sec-calc" class="section">
-    <div class="card">
-      <div class="card-title">🧮 積分計算</div>
-      <div class="alert alert-warning">
-        請確認各輪比賽結果已正確設定後，再執行積分計算。計算後結果將覆蓋舊積分。
-      </div>
-      <div id="calc-content"></div>
-      <div id="calc-msg" style="display:none; margin-top:12px"></div>
     </div>
   </div>
 
