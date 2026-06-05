@@ -114,12 +114,12 @@
 
   <!-- 管理頁籤 -->
   <div class="admin-tabs">
-    <div class="admin-tab active" onclick="switchTab('users')">👥 使用者管理</div>
-    <div class="admin-tab"       onclick="switchTab('mode')">🎛️ 系統模式</div>
-    <div class="admin-tab"       onclick="switchTab('rounds')">🔒 封盤設定</div>
-    <div class="admin-tab"       onclick="switchTab('results')">📋 比賽結果</div>
-    <div class="admin-tab"       onclick="switchTab('calc')">🧮 積分計算</div>
-    <div class="admin-tab"       onclick="switchTab('logs')">📜 封盤記錄</div>
+    <div class="main-tab admin-tab active" onclick="switchTab('users')">👥 使用者管理</div>
+    <div class="main-tab admin-tab"       onclick="switchTab('mode')">🎛️ 系統模式</div>
+    <div class="main-tab admin-tab"       onclick="switchTab('rounds')">🔒 封盤設定</div>
+    <div class="main-tab admin-tab"       onclick="switchTab('results')">📋 比賽結果</div>
+    <div class="main-tab admin-tab"       onclick="switchTab('calc')">🧮 積分計算</div>
+    <div class="main-tab admin-tab"       onclick="switchTab('logs')">📜 封盤記錄</div>
   </div>
 
   <!-- ① 使用者管理 -->
@@ -290,7 +290,7 @@ window.doLogout = async () => { await signOut(auth); window.location.href = "ind
 
 // ─── 頁籤切換 ─────────────────────────────────────────
 window.switchTab = (tab) => {
-  document.querySelectorAll(".admin-tab").forEach((el, i) => {
+  document.querySelectorAll(".main-tab").forEach((el, i) => {
     const tabs = ["users","mode","rounds","results","calc","logs"];
     el.classList.toggle("active", tabs[i] === tab);
   });
