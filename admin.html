@@ -174,6 +174,19 @@
     </div>
   </div>
 
+  <!-- 比賽結果 sticky 進度列 -->
+  <div id="result-sticky-footer" style="display:none; position:sticky; bottom:0; background:var(--bg); border-top:1px solid var(--border); padding:12px 16px; z-index:50; box-shadow:0 -2px 8px rgba(0,0,0,0.06);">
+    <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap">
+      <div style="display:flex; align-items:center; gap:10px">
+        <span id="result-progress-label" style="font-size:13px; font-weight:500; color:var(--text-sub)"></span>
+        <div style="width:120px; height:6px; background:var(--border); border-radius:10px; overflow:hidden">
+          <div id="result-progress-bar" style="height:100%; width:0%; background:var(--primary); border-radius:10px; transition:width .2s"></div>
+        </div>
+      </div>
+      <span id="result-progress-detail" style="font-size:12px; color:var(--text-sub)"></span>
+    </div>
+  </div>
+
   <!-- ③ 封盤設定 -->
   <div id="sec-rounds" class="section">
     <div class="card">
@@ -309,6 +322,13 @@ window.switchTab = (tab) => {
   document.getElementById(`sec-${tab}`).classList.add("active");
   if (tab === 'logs') initLogs();
   if (tab === 'mode') loadMode();
+  // 切離比賽結果時隱藏 footer
+  if (tab !== 'results') {
+    const f = document.getElementById("result-sticky-footer");
+    if (f) f.style.display = "none";
+  } else {
+    updateResultFooter(currentResultRound);
+  }
 };
 
 // ═══════════════════════════════════════════════════════
@@ -575,8 +595,62 @@ async function loadResultContent(n) {
   }
 }
 
-async function renderResultContent(n) {
+function updateResultFooter(n) {
+  const footer = document.getElementById("result-sticky-footer");
+  const label  = document.getElementById("result-progress-label");
+  const bar    = document.getElementById("result-progress-bar");
+  const detail = document.getElementById("result-progress-detail");
+  if (!footer) return;
 
+  // 只在比賽結果 tab 開啟時顯示
+  const secResults = document.getElementById("sec-results");
+  if (!secResults || !secResults.classList.contains("active")) {
+    footer.style.display = "none"; return;
+  }
+
+  footer.style.display = "block";
+
+  if (n === 0) {
+    const total  = advancedSets[0] ? advancedSets[0].size : 0;
+    const pct    = Math.min(total / 32 * 100, 100);
+    const isOk   = total === 32;
+    const isOver = total > 32;
+    label.textContent  = `已選 ${total} / 32 隊`;
+    label.style.color  = isOk ? "var(--teal)" : isOver ? "var(--coral)" : "var(--amber)";
+    bar.style.width    = pct + "%";
+    bar.style.background = isOk ? "var(--teal)" : isOver ? "var(--coral)" : "var(--primary)";
+
+    // 統計各組狀況
+    let okGroups  = 0;
+    let badGroups = [];
+    GROUPS.forEach(g => {
+      const cnt = TEAMS.filter(t => t.group === g).filter(t => advancedSets[0].has(t.teamId)).length;
+      if (cnt >= 2 && cnt <= 3) okGroups++;
+      else badGroups.push(`${g}(${cnt})`);
+    });
+    detail.textContent = isOk && okGroups === 12
+      ? "✓ 所有組別符合條件"
+      : badGroups.length > 0 ? `需修正：${badGroups.join(" ")}` : `${okGroups}/12 組符合`;
+    detail.style.color = isOk && okGroups === 12 ? "var(--teal)" : "var(--amber)";
+
+  } else {
+    const matchups = matchupData[n] || [];
+    const need     = matchups.length;
+    const have     = advancedSets[n] ? advancedSets[n].size : 0;
+    const isOk     = have === need && need > 0;
+    const pct      = need > 0 ? Math.min(have / need * 100, 100) : 0;
+    const labels   = ["","32強","16強","8強","4強","冠軍決賽"];
+    label.textContent  = need === 0 ? "尚未設定對戰組別" : `已選 ${have} / ${need} 隊`;
+    label.style.color  = isOk ? "var(--teal)" : need === 0 ? "var(--gray-400)" : "var(--amber)";
+    bar.style.width    = pct + "%";
+    bar.style.background = isOk ? "var(--teal)" : "var(--primary)";
+    detail.textContent = isOk ? `✓ 第${n}輪(${labels[n]})晉級隊伍已選完` : need === 0 ? "請先設定對戰組別" : `還需選 ${need - have} 隊`;
+    detail.style.color = isOk ? "var(--teal)" : "var(--text-sub)";
+  }
+}
+
+async function renderResultContent(n) {
+  updateResultFooter(n);
   let html = "";
 
   if (n === 0) {
@@ -779,6 +853,7 @@ window.toggleResult = async (n, teamId, maxPer, otherId) => {
   }
   advancedSets[n] = set;
   await renderResultContent(n);
+  updateResultFooter(n);
 };
 
 // 更新 matchup 資料
