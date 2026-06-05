@@ -581,19 +581,34 @@ async function renderResultContent(n) {
 
   if (n === 0) {
     // 小組賽：直接勾選晉級隊伍（每組選2~3隊）
+    const totalSel = advancedSets[0] ? advancedSets[0].size : 0;
+    const totalPct = Math.min(totalSel / 32 * 100, 100);
+    const totalOk  = totalSel === 32;
+    const totalOver= totalSel > 32;
     html += `
-      <p style="font-size:13px; color:var(--text-sub); margin-bottom:14px">
-        勾選各組晉級隊伍（每組 2~3 隊，共 32 隊）。
-      </p>`;
+      <div style="display:flex; align-items:center; gap:12px; margin-bottom:14px; flex-wrap:wrap">
+        <p style="font-size:13px; color:var(--text-sub)">
+          每組勾選 <strong>2 或 3 隊</strong>晉級，12 組加總需為 <strong>32 隊</strong>。
+        </p>
+        <div style="display:flex; align-items:center; gap:8px; margin-left:auto">
+          <span style="font-size:13px; font-weight:500; color:${totalOk?"var(--teal)":totalOver?"var(--coral)":"var(--amber)"}">
+            已選 ${totalSel} / 32 隊
+          </span>
+          <div style="width:100px; height:6px; background:var(--border); border-radius:10px; overflow:hidden">
+            <div style="height:100%; width:${totalPct}%; background:${totalOk?"var(--teal)":totalOver?"var(--coral)":"var(--primary)"}; border-radius:10px; transition:width .2s"></div>
+          </div>
+        </div>
+      </div>`;
     GROUPS.forEach(g => {
       const teams  = TEAMS.filter(t => t.group === g);
       const selCnt = teams.filter(t => advancedSets[0].has(t.teamId)).length;
+      const cc     = selCnt===2||selCnt===3 ? "var(--teal)" : selCnt>3 ? "var(--coral)" : "var(--amber)";
       html += `
         <div class="result-group">
           <div class="result-group-header">
-            <span>${g} 組</span>
-            <span style="font-size:12px; color:${selCnt>=2&&selCnt<=3?"var(--teal)":"var(--amber)"}">
-              ${selCnt} / 2~3 隊
+            <span>🔹 ${g} 組</span>
+            <span style="font-size:12px; font-weight:500; color:${cc}">
+              ${selCnt} / 2~3 隊 ${selCnt>=2&&selCnt<=3?"✓":""}
             </span>
           </div>
           <div class="result-teams">`;
@@ -674,6 +689,18 @@ async function renderResultContent(n) {
     if (matchupData[n].length === 0) {
       html += `<div class="alert alert-warning">請先完成步驟 1 設定對戰組別。</div>`;
     } else {
+      const needCnt = matchupData[n].length;
+      const haveCnt = advancedSets[n] ? advancedSets[n].size : 0;
+      const knockOk = haveCnt === needCnt;
+      html += `
+        <div style="display:flex; align-items:center; gap:8px; margin-bottom:12px">
+          <span style="font-size:13px; font-weight:500; color:${knockOk?"var(--teal)":"var(--amber)"}">
+            已選 ${haveCnt} / ${needCnt} 隊 ${knockOk?"✓":""}
+          </span>
+          <div style="width:100px; height:6px; background:var(--border); border-radius:10px; overflow:hidden">
+            <div style="height:100%; width:${Math.min(haveCnt/needCnt*100,100)}%; background:${knockOk?"var(--teal)":"var(--primary)"}; border-radius:10px; transition:width .2s"></div>
+          </div>
+        </div>`;
       matchupData[n].forEach((pair, idx) => {
         const [idA, idB] = pair;
         const teamA = TEAMS.find(t => t.teamId === idA) || { teamId:idA, nameCht:idA, weighting:1, name:idA };
@@ -703,6 +730,22 @@ async function renderResultContent(n) {
             </div>
           </div>`;
       });
+    }
+  }
+
+  // 驗證提示
+  if (n === 0) {
+    const total = advancedSets[0] ? advancedSets[0].size : 0;
+    let groupErr = "";
+    GROUPS.forEach(g => {
+      const cnt = TEAMS.filter(t=>t.group===g).filter(t=>advancedSets[0].has(t.teamId)).length;
+      if (cnt < 2 || cnt > 3) groupErr += `${g}組(${cnt}隊) `;
+    });
+    if (total !== 32 || groupErr) {
+      html += `<div class="alert alert-warning" style="margin-top:12px">
+        ⚠ ${total !== 32 ? `總隊數需為 32 隊（目前 ${total} 隊）。` : ""}
+        ${groupErr ? `以下組別需 2~3 隊：${groupErr}` : ""}
+      </div>`;
     }
   }
 
