@@ -110,7 +110,7 @@
   </div>
 </nav>
 
-<div class="container">
+<div class="container" id="admin-container">
 
   <!-- 管理頁籤 -->
   <div class="admin-tabs">
@@ -171,19 +171,6 @@
         </div>
       </div>
       <div id="mode-msg" style="display:none; margin-top:10px"></div>
-    </div>
-  </div>
-
-  <!-- 比賽結果 sticky 進度列 -->
-  <div id="result-sticky-footer" style="display:none; position:sticky; bottom:0; background:var(--bg); border-top:1px solid var(--border); padding:12px 16px; z-index:50; box-shadow:0 -2px 8px rgba(0,0,0,0.06);">
-    <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap">
-      <div style="display:flex; align-items:center; gap:10px">
-        <span id="result-progress-label" style="font-size:13px; font-weight:500; color:var(--text-sub)"></span>
-        <div style="width:120px; height:6px; background:var(--border); border-radius:10px; overflow:hidden">
-          <div id="result-progress-bar" style="height:100%; width:0%; background:var(--primary); border-radius:10px; transition:width .2s"></div>
-        </div>
-      </div>
-      <span id="result-progress-detail" style="font-size:12px; color:var(--text-sub)"></span>
     </div>
   </div>
 
@@ -266,6 +253,19 @@
     </div>
   </div>
 
+</div>
+
+<!-- 比賽結果 sticky 進度列（container 外，固定在視窗底部）-->
+<div id="result-sticky-footer" class="sticky-footer" style="display:none">
+  <div style="display:flex; flex-direction:column; gap:3px">
+    <div style="display:flex; align-items:center; gap:10px">
+      <span id="result-progress-label" style="font-size:13px; font-weight:500"></span>
+      <div style="width:120px; height:6px; background:var(--border); border-radius:10px; overflow:hidden">
+        <div id="result-progress-bar" style="height:100%; width:0%; background:var(--primary); border-radius:10px; transition:width .2s"></div>
+      </div>
+    </div>
+    <span id="result-progress-detail" style="font-size:12px; color:var(--text-sub)"></span>
+  </div>
 </div>
 
 <script type="module">
@@ -844,7 +844,8 @@ window.toggleResult = async (n, teamId, maxPer, otherId) => {
       set.delete(otherId);
       set.add(teamId);
     } else {
-      // 小組賽限制每組最多 maxPer 隊
+      // 小組賽：總上限 32 隊，每組上限 maxPer 隊
+      if (set.size >= 32) return;   // ← 總數上限 32
       const team      = TEAMS.find(t => t.teamId === teamId);
       const groupCnt  = TEAMS.filter(t => t.group === team?.group && set.has(t.teamId)).length;
       if (groupCnt >= maxPer) return;
