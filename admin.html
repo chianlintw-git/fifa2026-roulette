@@ -306,48 +306,56 @@ window.switchTab = (tab) => {
 window.loadUsers = async () => {
   document.getElementById("users-loading").style.display = "block";
   document.getElementById("users-table").style.display   = "none";
-  const snap  = await getDocs(collection(db, "users"));
-  const users = [];
-  snap.forEach(d => { if (d.id !== "_schema") users.push({ id:d.id, ...d.data() }); });
-  users.sort((a,b) => (a.nickname||"").localeCompare(b.nickname||"", "zh-TW"));
+  try {
+    const snap  = await getDocs(collection(db, "users"));
+    const users = [];
+    snap.forEach(d => { if (d.id !== "_schema") users.push({ id:d.id, ...d.data() }); });
+    users.sort((a,b) => (a.nickname||"").localeCompare(b.nickname||"", "zh-TW"));
 
-  const tbody = document.getElementById("users-tbody");
-  tbody.innerHTML = "";
-  users.forEach(u => {
-    const isSelf = u.uid === currentUser.uid || u.id === currentUser.uid;
-    tbody.innerHTML += `
-      <tr>
-        <td><strong>${u.nickname}</strong>${isSelf ? ' <span class="badge badge-primary" style="font-size:10px">我</span>' : ""}</td>
-        <td style="font-size:12px; color:var(--text-sub)">${u.email}</td>
-        <td style="text-align:center">
-          ${u.isAdmin
-            ? `<span class="badge badge-teal">是</span>`
-            : `<span style="color:var(--text-sub); font-size:12px">否</span>`}
-        </td>
-        <td style="text-align:center">
-          <select onchange="updateUserField('${u.id}','userType',this.value)">
-            <option value="player"  ${u.userType==="player"  ? "selected":""}>參賽者</option>
-            <option value="trial"   ${u.userType==="trial"   ? "selected":""}>試用者</option>
-          </select>
-        </td>
-        <td style="text-align:center">
-          <select onchange="updateUserField('${u.id}','isApproved',this.value==='true')" ${isSelf ? "disabled" : ""}>
-            <option value="false" ${!u.isApproved ? "selected":""}>未審核</option>
-            <option value="true"  ${ u.isApproved ? "selected":""}>已審核</option>
-          </select>
-        </td>
-        <td style="text-align:center">
-          ${isSelf
-            ? `<span style="font-size:12px; color:var(--text-sub)">—</span>`
-            : `<button class="btn btn-outline btn-sm" onclick="toggleAdmin('${u.id}',${!u.isAdmin})">
-                ${u.isAdmin ? "取消管理員" : "設為管理員"}
-               </button>`}
-        </td>
-      </tr>`;
-  });
+    const tbody = document.getElementById("users-tbody");
+    tbody.innerHTML = "";
+    users.forEach(u => {
+      const isSelf = u.uid === currentUser.uid || u.id === currentUser.uid;
+      tbody.innerHTML += `
+        <tr>
+          <td><strong>${u.nickname}</strong>${isSelf ? ' <span class="badge badge-primary" style="font-size:10px">我</span>' : ""}</td>
+          <td style="font-size:12px; color:var(--text-sub)">${u.email}</td>
+          <td style="text-align:center">
+            ${u.isAdmin
+              ? `<span class="badge badge-teal">是</span>`
+              : `<span style="color:var(--text-sub); font-size:12px">否</span>`}
+          </td>
+          <td style="text-align:center">
+            <select onchange="updateUserField('${u.id}','userType',this.value)">
+              <option value="player"  ${u.userType==="player"  ? "selected":""}>參賽者</option>
+              <option value="trial"   ${u.userType==="trial"   ? "selected":""}>試用者</option>
+            </select>
+          </td>
+          <td style="text-align:center">
+            <select onchange="updateUserField('${u.id}','isApproved',this.value==='true')" ${isSelf ? "disabled" : ""}>
+              <option value="false" ${!u.isApproved ? "selected":""}>未審核</option>
+              <option value="true"  ${ u.isApproved ? "selected":""}>已審核</option>
+            </select>
+          </td>
+          <td style="text-align:center">
+            ${isSelf
+              ? `<span style="font-size:12px; color:var(--text-sub)">—</span>`
+              : `<button class="btn btn-outline btn-sm" onclick="toggleAdmin('${u.id}',${!u.isAdmin})">
+                  ${u.isAdmin ? "取消管理員" : "設為管理員"}
+                 </button>`}
+          </td>
+        </tr>`;
+    });
 
-  document.getElementById("users-loading").style.display = "none";
-  document.getElementById("users-table").style.display   = "table";
+    document.getElementById("users-loading").style.display = "none";
+    document.getElementById("users-table").style.display   = "table";
+  } catch(e) {
+    document.getElementById("users-loading").innerHTML =
+      `<div class="alert alert-danger" style="margin:12px">
+         ❌ 載入失敗：${e.message}<br>
+         <small>請確認 Firestore 安全規則是否允許讀取，或重新整理頁面再試。</small>
+       </div>`;
+  }
 };
 
 window.updateUserField = async (uid, field, value) => {
