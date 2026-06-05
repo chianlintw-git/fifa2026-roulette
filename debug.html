@@ -2,11 +2,11 @@
 <html lang="zh-TW">
 <head>
   <meta charset="UTF-8">
-  <title>診斷工具</title>
+  <title>診斷工具 v2</title>
   <link rel="stylesheet" href="css/style.css">
   <style>
-    .debug-page { max-width:640px; margin:40px auto; padding:0 16px; }
-    .log-box { background:#1e1e1e; color:#d4d4d4; font-family:monospace; font-size:12px; padding:16px; border-radius:8px; min-height:200px; overflow-y:auto; margin-top:12px; line-height:1.8; }
+    .debug-page { max-width:700px; margin:40px auto; padding:0 16px; }
+    .log-box { background:#1e1e1e; color:#d4d4d4; font-family:monospace; font-size:12px; padding:16px; border-radius:8px; min-height:200px; overflow-y:auto; margin-top:12px; line-height:1.8; white-space:pre-wrap; }
     .log-ok   { color:#4ec9b0; }
     .log-err  { color:#f48771; }
     .log-info { color:#9cdcfe; }
@@ -16,103 +16,132 @@
 <body>
 <div class="debug-page">
   <div class="card">
-    <div class="card-title">🔍 系統診斷工具</div>
-    <div class="alert alert-warning">完成診斷後請刪除此檔案。</div>
-    <div style="display:flex; gap:8px; flex-wrap:wrap">
-      <button class="btn btn-primary" onclick="runDiag()">開始診斷</button>
+    <div class="card-title">🔍 診斷工具 v2</div>
+    <div class="alert alert-warning">完成後請刪除此檔案。</div>
+    <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:8px">
+      <button class="btn btn-primary" onclick="runDiag()">① 基本診斷</button>
+      <button class="btn btn-teal"    onclick="simLoadUsers()">② 模擬 loadUsers</button>
       <button class="btn btn-outline" onclick="clearLog()">清除</button>
     </div>
-    <div class="log-box" id="log"><span class="log-info">▶ 按「開始診斷」執行...</span></div>
+    <div class="log-box" id="log"><span class="log-info">▶ 按按鈕執行診斷...</span></div>
   </div>
 </div>
 
 <script type="module">
 import { auth, db } from "./js/firebase-config.js";
-import { onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import { collection, getDocs, doc, getDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+let currentUser = null;
+
+onAuthStateChanged(auth, async (user) => {
+  if (user) {
+    const snap = await getDoc(doc(db, "users", user.uid));
+    if (snap.exists()) {
+      currentUser = { ...snap.data(), uid: user.uid };
+      log(`✓ 已登入：${currentUser.nickname} (${user.uid})`, "ok");
+    }
+  } else {
+    log("❌ 未登入，請先至 index.html 登入", "err");
+  }
+});
 
 function log(msg, type="info") {
   const box = document.getElementById("log");
   box.innerHTML += `\n<span class="log-${type}">${msg}</span>`;
   box.scrollTop = box.scrollHeight;
 }
-
 window.clearLog = () => { document.getElementById("log").innerHTML = ""; };
 
+// ① 基本診斷
 window.runDiag = async () => {
-  document.getElementById("log").innerHTML = "";
-  log("═══ 開始診斷 ═══", "info");
-
-  // 1. Firebase Auth 狀態
-  log("\n【1】檢查登入狀態...", "info");
-  const user = auth.currentUser;
-  if (!user) {
-    log("  ❌ 未登入，請先至 index.html 登入後再執行診斷", "err");
-    return;
-  }
-  log(`  ✓ 已登入 uid: ${user.uid}`, "ok");
-  log(`  ✓ email: ${user.email}`, "ok");
-
-  // 2. 讀取自己的 users 文件
-  log("\n【2】讀取 users/{uid} 文件...", "info");
-  try {
-    const snap = await getDoc(doc(db, "users", user.uid));
-    if (!snap.exists()) {
-      log("  ❌ 找不到此 uid 的 users 文件", "err");
-      log("  → 請確認 Firestore users collection 有建立此帳號文件", "warn");
-    } else {
-      const d = snap.data();
-      log(`  ✓ 找到文件`, "ok");
-      log(`  nickname:   ${d.nickname}`, "info");
-      log(`  isAdmin:    ${d.isAdmin}`, d.isAdmin ? "ok" : "warn");
-      log(`  isApproved: ${d.isApproved}`, d.isApproved ? "ok" : "warn");
-      log(`  userType:   ${d.userType}`, "info");
-      log(`  uid field:  ${d.uid || "（未設定）"}`, d.uid ? "ok" : "warn");
-      if (!d.isAdmin)    log("  ⚠ isAdmin 不是 true，admin.html 會被踢出", "err");
-      if (!d.isApproved) log("  ⚠ isApproved 不是 true，無法登入", "err");
-    }
-  } catch(e) {
-    log(`  ❌ 讀取失敗: ${e.code} - ${e.message}`, "err");
-  }
-
-  // 3. 讀取整個 users collection
-  log("\n【3】讀取 users collection（getDocs）...", "info");
+  clearLog();
+  log("═══ 基本診斷 ═══", "info");
   try {
     const snap = await getDocs(collection(db, "users"));
-    log(`  ✓ 讀取成功，共 ${snap.size} 筆文件`, "ok");
+    log(`users collection: ${snap.size} 筆`, "ok");
     snap.forEach(d => {
-      log(`  文件 id: ${d.id} | nickname: ${d.data().nickname || "（無）"} | isAdmin: ${d.data().isAdmin}`, "info");
+      const data = d.data();
+      log(`  id=${d.id} | nickname=${data.nickname} | isAdmin=${data.isAdmin} | isApproved=${data.isApproved} | uid=${data.uid||"無"}`, "info");
     });
   } catch(e) {
-    log(`  ❌ 讀取失敗: ${e.code} - ${e.message}`, "err");
-    if (e.code === "permission-denied") {
-      log("  → Firestore 安全規則拒絕讀取 users collection", "warn");
-    }
+    log(`❌ ${e.code}: ${e.message}`, "err");
   }
+};
 
-  // 4. 讀取 rounds
-  log("\n【4】讀取 rounds collection...", "info");
+// ② 逐步模擬 loadUsers，找出哪一行出錯
+window.simLoadUsers = async () => {
+  clearLog();
+  log("═══ 模擬 loadUsers 逐步執行 ═══", "info");
+
+  // step 1: getDocs
+  log("\n[step 1] getDocs users...", "info");
+  let snap;
   try {
-    const snap = await getDocs(collection(db, "rounds"));
-    log(`  ✓ rounds: ${snap.size} 筆`, "ok");
+    snap = await getDocs(collection(db, "users"));
+    log(`  ✓ 取得 ${snap.size} 筆`, "ok");
   } catch(e) {
-    log(`  ❌ 讀取失敗: ${e.code} - ${e.message}`, "err");
+    log(`  ❌ ${e.code}: ${e.message}`, "err"); return;
   }
 
-  // 5. 讀取 settings
-  log("\n【5】讀取 settings/system...", "info");
-  try {
-    const snap = await getDoc(doc(db, "settings", "system"));
-    if (snap.exists()) {
-      log(`  ✓ mode: ${snap.data().mode}`, "ok");
-    } else {
-      log("  ⚠ settings/system 不存在，需手動建立", "warn");
+  // step 2: 逐筆處理
+  log("\n[step 2] 逐筆處理每個 document...", "info");
+  const users = [];
+  let i = 0;
+  snap.forEach(d => {
+    i++;
+    try {
+      if (d.id === "_schema") { log(`  [${i}] 跳過 _schema`, "warn"); return; }
+      const data = d.data();
+      const u = {
+        id:         d.id,
+        uid:        data.uid        || d.id,
+        nickname:   data.nickname   || "（無暱稱）",
+        email:      data.email      || "",
+        isAdmin:    data.isAdmin    === true,
+        isApproved: data.isApproved === true,
+        userType:   data.userType   || "player"
+      };
+      users.push(u);
+      log(`  [${i}] ✓ ${u.nickname} | admin=${u.isAdmin} | approved=${u.isApproved}`, "ok");
+    } catch(e) {
+      log(`  [${i}] ❌ 處理 doc ${d.id} 時出錯: ${e.message}`, "err");
     }
+  });
+
+  // step 3: sort
+  log("\n[step 3] 排序...", "info");
+  try {
+    users.sort((a,b) => a.nickname.localeCompare(b.nickname, "zh-TW"));
+    log(`  ✓ 排序完成，${users.length} 筆`, "ok");
   } catch(e) {
-    log(`  ❌ 讀取失敗: ${e.code} - ${e.message}`, "err");
+    log(`  ❌ 排序失敗: ${e.message}`, "err"); return;
   }
 
-  log("\n═══ 診斷完成 ═══", "info");
+  // step 4: 產生每列 HTML
+  log("\n[step 4] 逐列產生 HTML...", "info");
+  users.forEach((u, idx) => {
+    try {
+      const isSelf = u.id === (currentUser?.uid);
+      const row = `<tr><td>${u.nickname}</td><td>${u.email}</td><td>${u.isAdmin}</td></tr>`;
+      log(`  [${idx+1}] ✓ ${u.nickname} (isSelf=${isSelf})`, "ok");
+    } catch(e) {
+      log(`  [${idx+1}] ❌ 產生 ${u.nickname} 列時出錯: ${e.message}`, "err");
+    }
+  });
+
+  // step 5: 寫入 tbody
+  log("\n[step 5] 寫入 tbody...", "info");
+  try {
+    const tbody = document.getElementById("log"); // 測試用，不寫入真實 tbody
+    log("  ✓ getElementById 正常", "ok");
+  } catch(e) {
+    log(`  ❌ ${e.message}`, "err");
+  }
+
+  log("\n═══ 模擬完成 ═══", "info");
+  log(`結論：成功處理 ${users.length} 筆，若以上全部 ✓ 代表 loadUsers 邏輯無誤`, "warn");
+  log("若仍轉圈，問題可能在 admin.html 的 JS 其他部分造成 exception", "warn");
 };
 </script>
 </body>
