@@ -522,6 +522,13 @@ async function loadResultContent(n) {
   advancedSets[n] = new Set(resultData.advancedTeams || []);
   matchupData[n]  = resultData.matchups || [];
 
+  document.getElementById("results-loading").style.display = "none";
+  document.getElementById("results-content").style.display = "block";
+  renderResultContent(n);
+}
+
+function renderResultContent(n) {
+
   let html = "";
 
   if (n === 0) {
@@ -659,6 +666,7 @@ async function loadResultContent(n) {
     </div>`;
 
   document.getElementById("results-content").innerHTML = html;
+}
   document.getElementById("results-loading").style.display = "none";
   document.getElementById("results-content").style.display = "block";
 }
@@ -682,7 +690,7 @@ window.toggleResult = (n, teamId, maxPer, otherId) => {
     }
   }
   advancedSets[n] = set;
-  loadResultContent(n);
+  renderResultContent(n);
 };
 
 // 更新 matchup 資料
