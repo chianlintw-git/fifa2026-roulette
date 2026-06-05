@@ -273,17 +273,28 @@ let matchupData   = {};   // { "1": [[idA,idB],...], ... }
 
 // ─── 認證（僅管理員可進入）────────────────────────────
 onAuthStateChanged(auth, async (user) => {
+  console.log("[AUTH] start", user?.uid);
   if (!user) { window.location.href = "index.html"; return; }
+  console.log("[AUTH] getting user doc...");
   const snap = await getDoc(doc(db, "users", user.uid));
+  console.log("[AUTH] snap exists:", snap.exists());
   if (!snap.exists() || !snap.data().isApproved || !snap.data().isAdmin) {
+    console.log("[AUTH] not approved or not admin, redirecting");
     window.location.href = "main.html"; return;
   }
+  console.log("[AUTH] setting currentUser...");
   currentUser = { ...snap.data(), uid: user.uid };
+  console.log("[AUTH] setting nav-nickname...");
   document.getElementById("nav-nickname").textContent = currentUser.nickname;
+  console.log("[AUTH] calling loadUsers...");
   loadUsers();
+  console.log("[AUTH] calling loadRounds...");
   loadRounds();
+  console.log("[AUTH] calling loadResultRoundTabs...");
   loadResultRoundTabs();
+  console.log("[AUTH] calling renderCalc...");
   renderCalc();
+  console.log("[AUTH] all done");
 });
 
 window.doLogout = async () => { await signOut(auth); window.location.href = "index.html"; };
