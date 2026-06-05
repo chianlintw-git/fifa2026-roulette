@@ -945,6 +945,12 @@ window.calcRound = async (n) => {
   msg.style.display = "none";
 
   try {
+    // 依模式決定 collection
+    const sysSnap  = await getDoc(doc(db, "settings", "system"));
+    const sysMode  = sysSnap.exists() ? (sysSnap.data().mode || "trial") : "trial";
+    const scoreCol = sysMode === "trial" ? "scores_trial" : "scores";
+    const picksCol = sysMode === "trial" ? "picks_trial"  : "picks";
+
     // 取得晉級隊伍
     const resultSnap = await getDoc(doc(db, "results", String(n)));
     if (!resultSnap.exists()) throw new Error("找不到比賽結果，請先設定晉級隊伍。");
@@ -959,7 +965,7 @@ window.calcRound = async (n) => {
     for (const userDoc of usersSnap.docs) {
       if (userDoc.id === "_schema") continue;
       const uid      = userDoc.id;
-      const pickSnap = await getDoc(doc(db, "picks", `${uid}_${n}`));
+      const pickSnap = await getDoc(doc(db, picksCol, `${uid}_${n}`));
       const picks    = pickSnap.exists() ? (pickSnap.data().selectedTeams || []) : [];
 
       let roundScore = 0;
@@ -975,7 +981,7 @@ window.calcRound = async (n) => {
       });
 
       // 讀取現有積分，累加
-      const scoreSnap = await getDoc(doc(db, "scores", uid));
+      const scoreSnap = await getDoc(doc(db, scoreCol, uid));
       const existing  = scoreSnap.exists() ? scoreSnap.data() : {};
       const updated   = {
         uid,
@@ -997,11 +1003,6 @@ window.calcRound = async (n) => {
     }
 
     await batch.commit();
-
-    // 依模式決定 scores collection
-    const sysSnap  = await getDoc(doc(db, "settings", "system"));
-    const sysMode  = sysSnap.exists() ? (sysSnap.data().mode || "trial") : "trial";
-    const scoreCol = sysMode === "trial" ? "scores_trial" : "scores";
 
     // 同步寫入 score_logs：記錄本次計算後每位使用者的總積分快照
     const calcTime  = new Date();
