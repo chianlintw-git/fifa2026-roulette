@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <title>診斷工具</title>
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    .debug-page { max-width:640px; margin:40px auto; padding:0 16px; }
+    .log-box { background:#1e1e1e; color:#d4d4d4; font-family:monospace; font-size:12px; padding:16px; border-radius:8px; min-height:200px; overflow-y:auto; margin-top:12px; line-height:1.8; }
+    .log-ok   { color:#4ec9b0; }
+    .log-err  { color:#f48771; }
+    .log-info { color:#9cdcfe; }
+    .log-warn { color:#dcdcaa; }
+  </style>
+</head>
+<body>
+<div class="debug-page">
+  <div class="card">
+    <div class="card-title">🔍 系統診斷工具</div>
+    <div class="alert alert-warning">完成診斷後請刪除此檔案。</div>
+    <div style="display:flex; gap:8px; flex-wrap:wrap">
+      <button class="btn btn-primary" onclick="runDiag()">開始診斷</button>
+      <button class="btn btn-outline" onclick="clearLog()">清除</button>
+    </div>
+    <div class="log-box" id="log"><span class="log-info">▶ 按「開始診斷」執行...</span></div>
+  </div>
+</div>
+
+<script type="module">
+import { auth, db } from "./js/firebase-config.js";
+import { onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+import { collection, getDocs, doc, getDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+function log(msg, type="info") {
+  const box = document.getElementById("log");
+  box.innerHTML += `\n<span class="log-${type}">${msg}</span>`;
+  box.scrollTop = box.scrollHeight;
+}
+
+window.clearLog = () => { document.getElementById("log").innerHTML = ""; };
+
+window.runDiag = async () => {
+  document.getElementById("log").innerHTML = "";
+  log("═══ 開始診斷 ═══", "info");
+
+  // 1. Firebase Auth 狀態
+  log("\n【1】檢查登入狀態...", "info");
+  const user = auth.currentUser;
+  if (!user) {
+    log("  ❌ 未登入，請先至 index.html 登入後再執行診斷", "err");
+    return;
+  }
+  log(`  ✓ 已登入 uid: ${user.uid}`, "ok");
+  log(`  ✓ email: ${user.email}`, "ok");
+
+  // 2. 讀取自己的 users 文件
+  log("\n【2】讀取 users/{uid} 文件...", "info");
+  try {
+    const snap = await getDoc(doc(db, "users", user.uid));
+    if (!snap.exists()) {
+      log("  ❌ 找不到此 uid 的 users 文件", "err");
+      log("  → 請確認 Firestore users collection 有建立此帳號文件", "warn");
+    } else {
+      const d = snap.data();
+      log(`  ✓ 找到文件`, "ok");
+      log(`  nickname:   ${d.nickname}`, "info");
+      log(`  isAdmin:    ${d.isAdmin}`, d.isAdmin ? "ok" : "warn");
+      log(`  isApproved: ${d.isApproved}`, d.isApproved ? "ok" : "warn");
+      log(`  userType:   ${d.userType}`, "info");
+      log(`  uid field:  ${d.uid || "（未設定）"}`, d.uid ? "ok" : "warn");
+      if (!d.isAdmin)    log("  ⚠ isAdmin 不是 true，admin.html 會被踢出", "err");
+      if (!d.isApproved) log("  ⚠ isApproved 不是 true，無法登入", "err");
+    }
+  } catch(e) {
+    log(`  ❌ 讀取失敗: ${e.code} - ${e.message}`, "err");
+  }
+
+  // 3. 讀取整個 users collection
+  log("\n【3】讀取 users collection（getDocs）...", "info");
+  try {
+    const snap = await getDocs(collection(db, "users"));
+    log(`  ✓ 讀取成功，共 ${snap.size} 筆文件`, "ok");
+    snap.forEach(d => {
+      log(`  文件 id: ${d.id} | nickname: ${d.data().nickname || "（無）"} | isAdmin: ${d.data().isAdmin}`, "info");
+    });
+  } catch(e) {
+    log(`  ❌ 讀取失敗: ${e.code} - ${e.message}`, "err");
+    if (e.code === "permission-denied") {
+      log("  → Firestore 安全規則拒絕讀取 users collection", "warn");
+    }
+  }
+
+  // 4. 讀取 rounds
+  log("\n【4】讀取 rounds collection...", "info");
+  try {
+    const snap = await getDocs(collection(db, "rounds"));
+    log(`  ✓ rounds: ${snap.size} 筆`, "ok");
+  } catch(e) {
+    log(`  ❌ 讀取失敗: ${e.code} - ${e.message}`, "err");
+  }
+
+  // 5. 讀取 settings
+  log("\n【5】讀取 settings/system...", "info");
+  try {
+    const snap = await getDoc(doc(db, "settings", "system"));
+    if (snap.exists()) {
+      log(`  ✓ mode: ${snap.data().mode}`, "ok");
+    } else {
+      log("  ⚠ settings/system 不存在，需手動建立", "warn");
+    }
+  } catch(e) {
+    log(`  ❌ 讀取失敗: ${e.code} - ${e.message}`, "err");
+  }
+
+  log("\n═══ 診斷完成 ═══", "info");
+};
+</script>
+</body>
+</html>
