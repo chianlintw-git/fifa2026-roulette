@@ -446,6 +446,7 @@ window.switchMode = async () => {
 };
 
 async function loadRounds() {
+  try {
   const snap   = await getDocs(collection(db, "rounds"));
   const rounds = [];
   snap.forEach(d => rounds.push(d.data()));
@@ -481,6 +482,10 @@ async function loadRounds() {
   document.getElementById("rounds-loading").style.display  = "none";
   document.getElementById("rounds-content").style.display  = "block";
   document.getElementById("rounds-btn-wrap").style.display = "block";
+  } catch(e) {
+    document.getElementById("rounds-loading").innerHTML =
+      `<div class="alert alert-danger">❌ 封盤設定載入失敗：${e.message}</div>`;
+  }
 }
 
 window.saveRounds = async () => {
@@ -515,6 +520,7 @@ window.saveRounds = async () => {
 // ③ 比賽結果
 // ═══════════════════════════════════════════════════════
 async function loadResultRoundTabs() {
+  try {
   const labels = ["小組賽","32強","16強","8強","4強","決賽"];
   const wrap   = document.getElementById("result-round-tabs");
   wrap.innerHTML = "";
@@ -532,13 +538,17 @@ async function loadResultRoundTabs() {
     wrap.appendChild(btn);
   }
   loadResultContent(0);
+  } catch(e) {
+    document.getElementById("results-loading").innerHTML =
+      `<div class="alert alert-danger">❌ 比賽結果載入失敗：${e.message}</div>`;
+  }
 }
 
 async function loadResultContent(n) {
   document.getElementById("results-loading").style.display = "block";
   document.getElementById("results-content").style.display = "none";
   document.getElementById("results-msg").style.display     = "none";
-
+  try {
   const resultSnap = await getDoc(doc(db, "results", String(n)));
   const resultData = resultSnap.exists() ? resultSnap.data() : { advancedTeams:[], matchups:[] };
 
@@ -548,6 +558,10 @@ async function loadResultContent(n) {
   document.getElementById("results-loading").style.display = "none";
   document.getElementById("results-content").style.display = "block";
   renderResultContent(n);
+  } catch(e) {
+    document.getElementById("results-loading").innerHTML =
+      `<div class="alert alert-danger">❌ 載入失敗：${e.message}</div>`;
+  }
 }
 
 function renderResultContent(n) {
