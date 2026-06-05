@@ -568,14 +568,14 @@ async function loadResultContent(n) {
 
   document.getElementById("results-loading").style.display = "none";
   document.getElementById("results-content").style.display = "block";
-  renderResultContent(n);
+  await renderResultContent(n);
   } catch(e) {
     document.getElementById("results-loading").innerHTML =
       `<div class="alert alert-danger">❌ 載入失敗：${e.message}</div>`;
   }
 }
 
-function renderResultContent(n) {
+async function renderResultContent(n) {
 
   let html = "";
 
@@ -717,7 +717,7 @@ function renderResultContent(n) {
 }
 
 // 勾選晉級隊伍
-window.toggleResult = (n, teamId, maxPer, otherId) => {
+window.toggleResult = async (n, teamId, maxPer, otherId) => {
   const set = advancedSets[n] || new Set();
   if (set.has(teamId)) {
     set.delete(teamId);
@@ -735,7 +735,7 @@ window.toggleResult = (n, teamId, maxPer, otherId) => {
     }
   }
   advancedSets[n] = set;
-  renderResultContent(n);
+  await renderResultContent(n);
 };
 
 // 更新 matchup 資料
