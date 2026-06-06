@@ -725,15 +725,26 @@ async function renderResultContent(n) {
     // 顯示現有 matchups
     for (let i = 0; i < matchCount; i++) {
       const pair  = matchupData[n][i] || ["", ""];
-      const opts  = availTeams.map(t =>
-        `<option value="${t.teamId}" ${pair[0]===t.teamId||pair[1]===t.teamId?"":""}>${t.nameCht}</option>`
-      ).join("");
-      const optsA = availTeams.map(t =>
-        `<option value="${t.teamId}" ${pair[0]===t.teamId?"selected":""}>${t.nameCht}</option>`
-      ).join("");
-      const optsB = availTeams.map(t =>
-        `<option value="${t.teamId}" ${pair[1]===t.teamId?"selected":""}>${t.nameCht}</option>`
-      ).join("");
+      // 收集所有已被其他組選用的隊伍（排除本組自己）
+      const usedByOthers = new Set();
+      matchupData[n].forEach((otherPair, oi) => {
+        if (oi === i) return;  // 跳過本組
+        if (otherPair[0]) usedByOthers.add(otherPair[0]);
+        if (otherPair[1]) usedByOthers.add(otherPair[1]);
+      });
+
+      const optsA = availTeams.map(t => {
+        const isSelected = pair[0] === t.teamId;
+        const isUsed     = usedByOthers.has(t.teamId);
+        return `<option value="${t.teamId}" ${isSelected?"selected":""} ${isUsed&&!isSelected?"disabled":""}>` +
+          `${t.nameCht}${isUsed&&!isSelected?" (已選用)":""}</option>`;
+      }).join("");
+      const optsB = availTeams.map(t => {
+        const isSelected = pair[1] === t.teamId;
+        const isUsed     = usedByOthers.has(t.teamId);
+        return `<option value="${t.teamId}" ${isSelected?"selected":""} ${isUsed&&!isSelected?"disabled":""}>` +
+          `${t.nameCht}${isUsed&&!isSelected?" (已選用)":""}</option>`;
+      }).join("");
 
       html += `
         <div class="matchup-row">
