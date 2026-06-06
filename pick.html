@@ -42,6 +42,7 @@
   <div class="navbar-nav">
     <span class="navbar-user" id="nav-nickname"></span>
     <a href="main.html">🏆 排行榜</a>
+    <a href="picks-view.html">👁 選隊結果</a>
     <a href="bracket.html">📊 戰績</a>
     <a href="pick.html" class="active">🎯 選隊</a>
     <a href="profile.html">👤 設定</a>
@@ -206,8 +207,7 @@ function updateProgress() {
 
 async function renderKnockout(content, n) {
   const resultSnap = await getDoc(doc(db, "results", String(n)));
-  const rawMatchups = resultSnap.exists() ? (resultSnap.data().matchups||[]) : [];
-  const matchups    = rawMatchups.map(m => Array.isArray(m) ? m : [m.a||'', m.b||'']);
+  const matchups   = resultSnap.exists() ? (resultSnap.data().matchups||[]) : [];
   const selected   = new Set(myPicks[n]||[]);
   const labels     = ["","32強","16強","8強","4強","冠軍決賽"];
   if (matchups.length===0) {

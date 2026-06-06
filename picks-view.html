@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>選隊結果 — 2026世界盃足球輪盤盟主賽</title>
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    .round-tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px}
+    .round-tab{padding:7px 14px;border-radius:20px;font-size:13px;font-weight:500;border:1.5px solid var(--border);background:var(--bg);cursor:pointer;color:var(--text-sub);transition:all .15s}
+    .round-tab:hover{border-color:var(--primary);color:var(--primary)}
+    .round-tab.active{background:var(--primary);border-color:var(--primary);color:#fff}
+    .round-tab.sealed{border-color:var(--teal);color:var(--teal)}
+    .round-tab.sealed.active{background:var(--teal);border-color:var(--teal);color:#fff}
+    .picks-table{width:100%;border-collapse:collapse;font-size:13px}
+    .picks-table th{text-align:left;padding:8px 10px;border-bottom:2px solid var(--border);color:var(--text-sub);font-weight:500;font-size:12px;white-space:nowrap}
+    .picks-table td{padding:9px 10px;border-bottom:1px solid var(--bg2);vertical-align:top}
+    .picks-table tr:last-child td{border-bottom:none}
+    .picks-table tr:hover td{background:var(--bg2)}
+    .picks-table tr.self td{background:var(--primary-light)}
+    .team-tags{display:flex;flex-wrap:wrap;gap:4px}
+    .team-tag{display:inline-flex;align-items:center;gap:4px;padding:2px 7px;border-radius:12px;font-size:11px;background:var(--bg2);border:1px solid var(--border);white-space:nowrap}
+    .team-tag.hit{background:var(--teal-light);border-color:var(--teal);color:#085041;font-weight:500}
+    .team-tag.miss{opacity:.5}
+    .stat-pill{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:500}
+    .stat-hit{background:var(--teal-light);color:#085041}
+    .sealed-badge{font-size:11px;padding:1px 7px;border-radius:10px;background:var(--teal-light);color:#085041;margin-left:6px;vertical-align:middle}
+    .open-badge{font-size:11px;padding:1px 7px;border-radius:10px;background:var(--amber-light);color:#633806;margin-left:6px;vertical-align:middle}
+  </style>
+</head>
+<body>
+<nav class="navbar">
+  <div class="navbar-brand"><span class="flag">&#x26BD;</span><span>2026 輪盤盟主賽</span></div>
+  <div class="navbar-nav">
+    <span class="navbar-user" id="nav-nickname"></span>
+    <a href="main.html">&#x1F3C6; 排行榜</a>
+    <a href="picks-view.html" class="active">&#x1F441; 選隊結果</a>
+    <a href="bracket.html">&#x1F4CA; 戰績</a>
+    <a href="pick.html">&#x1F3AF; 選隊</a>
+    <a href="profile.html">&#x1F464; 設定</a>
+    <a href="admin.html" id="nav-admin" style="display:none">&#x2699;&#xFE0F; 管理</a>
+    <a href="#" onclick="doLogout()">&#x1F6AA; 登出</a>
+  </div>
+</nav>
+<div class="container">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
+    <div>
+      <h2 style="font-size:17px;font-weight:500">&#x1F441; 選隊結果</h2>
+      <p style="font-size:12px;color:var(--text-sub);margin-top:2px">封盤後顯示各輪參賽者選隊內容</p>
+    </div>
+    <button class="btn btn-outline btn-sm" onclick="loadAll()">&#x1F504; 重新整理</button>
+  </div>
+  <div id="round-tabs" class="round-tabs"><div class="loading"><div class="spinner"></div></div></div>
+  <div id="content"><div class="loading"><div class="spinner"></div>載入中...</div></div>
+</div>
+<script type="module">
+import { auth, db } from "./js/firebase-config.js";
+import { TEAMS, GROUPS } from "./js/teams-data.js";
+import { onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+import { doc, getDoc, getDocs, collection } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+let currentUser  = null;
+let currentRound = 0;
+let roundsData   = [];
+let resultsData  = {};
+let logsData     = {};
+
+onAuthStateChanged(auth, async (user) => {
+  if (!user) { window.location.href = "index.html"; return; }
+  const snap = await getDoc(doc(db, "users", user.uid));
+  if (!snap.exists() || !snap.data().isApproved) { await signOut(auth); window.location.href = "index.html"; return; }
+  currentUser = { ...snap.data(), uid: user.uid };
+  document.getElementById("nav-nickname").textContent = currentUser.nickname;
+  if (currentUser.isAdmin) document.getElementById("nav-admin").style.display = "inline-flex";
+  await loadAll();
+});
+window.doLogout = async () => { await signOut(auth); window.location.href = "index.html"; };
+
+window.loadAll = async () => {
+  document.getElementById("round-tabs").innerHTML = "<div class='loading'><div class='spinner'></div></div>";
+  document.getElementById("content").innerHTML    = "<div class='loading'><div class='spinner'></div>載入中...</div>";
+  try {
+    const roundsSnap = await getDocs(collection(db, "rounds"));
+    roundsData = [];
+    roundsSnap.forEach(d => roundsData.push(d.data()));
+    roundsData.sort((a,b) => a.round - b.round);
+    const now = new Date();
+    roundsData.forEach(r => {
+      const due = r.dueDate?.toDate ? r.dueDate.toDate() : new Date(r.dueDate);
+      if (now >= due) r.status = "close";
+    });
+    for (let i = 0; i <= 5; i++) {
+      const s = await getDoc(doc(db, "results", String(i)));
+      resultsData[i] = s.exists() ? s.data() : { advancedTeams:[], matchups:[] };
+    }
+    const logsSnap = await getDocs(collection(db, "logs"));
+    logsData = {};
+    logsSnap.forEach(d => {
+      const data = d.data();
+      const r    = data.round;
+      if (!logsData[r]) logsData[r] = [];
+      logsData[r].push(data);
+    });
+    renderTabs();
+    renderRound(currentRound);
+  } catch(e) {
+    document.getElementById("content").innerHTML = "<div class='alert alert-danger'>載入失敗：" + e.message + "</div>";
+  }
+};
+
+function renderTabs() {
+  const labels = ["小組賽","32強","16強","8強","4強","冠軍決賽"];
+  const wrap   = document.getElementById("round-tabs");
+  wrap.innerHTML = "";
+  roundsData.forEach(r => {
+    const sealed = r.status === "close";
+    const btn    = document.createElement("div");
+    btn.className = "round-tab" + (r.round===currentRound?" active":"") + (sealed?" sealed":"");
+    btn.textContent = "第"+r.round+"輪 "+labels[r.round]+(sealed?" 🔒":"");
+    btn.onclick = () => { currentRound=r.round; renderTabs(); renderRound(r.round); };
+    wrap.appendChild(btn);
+  });
+}
+
+function renderRound(n) {
+  const content  = document.getElementById("content");
+  const round    = roundsData.find(r => r.round === n);
+  const sealed   = round?.status === "close";
+  const labels   = ["小組賽","32強淘汰賽","16強淘汰賽","8強淘汰賽","4強淘汰賽","冠軍決賽"];
+  if (!sealed) {
+    content.innerHTML = "<div class='card'><div class='alert alert-warning' style='margin-bottom:0'>")
+      + "&#x1F512; 第"+n+"輪（"+labels[n]+"）尚未封盤，封盤後才會顯示各人選隊結果。</div></div>";
+    return;
+  }
+  const logs = logsData[n] || [];
+  if (logs.length === 0) {
+    content.innerHTML = "<div class='card'><div class='alert alert-warning' style='margin-bottom:0'>")
+      + "&#x26A0; 管理員尚未產出本輪封盤記錄，請管理員至「封盤記錄」頁產出。</div></div>";
+    return;
+  }
+  const advanced  = new Set(resultsData[n]?.advancedTeams || []);
+  const hasResult = advanced.size > 0;
+  const matchups  = (resultsData[n]?.matchups||[]).map(m=>Array.isArray(m)?m:[m.a||"",m.b||""]);
+  const players   = logs.filter(l=>l.userType!=="trial").sort((a,b)=>a.nickname.localeCompare(b.nickname,"zh-TW"));
+  const trials    = logs.filter(l=>l.userType==="trial").sort((a,b)=>a.nickname.localeCompare(b.nickname,"zh-TW"));
+  const sorted    = [...players, ...trials];
+  let html = "<div class='card' style='padding:0;overflow:hidden'>"
+    + "<div style='padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;flex-wrap:wrap'>"
+    + "<span style='font-size:14px;font-weight:500'>第 "+n+" 輪："+labels[n]+"</span>"
+    + "<span class='sealed-badge'>&#x1F512; 封盤存證</span>"
+    + (hasResult ? "<span class='sealed-badge'>&#x2713; 比賽結果已公布</span>" : "<span class='open-badge'>&#x2026; 比賽結果尚未公布</span>")
+    + "<span style='font-size:12px;color:var(--text-sub);margin-left:auto'>"+sorted.length+" 位參賽者</span>"
+    + "</div><div style='overflow-x:auto'><table class='picks-table'><thead><tr>"
+    + "<th style='width:90px'>暱稱</th>"
+    + "<th style='min-width:60px;text-align:center'>選隊數</th>"
+    + (hasResult ? "<th style='min-width:60px;text-align:center'>命中</th>" : "")
+    + "<th>選擇隊伍</th></tr></thead><tbody>";
+  sorted.forEach(log => {
+    const isSelf   = log.uid === currentUser.uid;
+    const selected = new Set(log.selectedTeams || []);
+    const hitCount = hasResult ? [...selected].filter(id=>advanced.has(id)).length : 0;
+    html += "<tr class='"+(isSelf?"self":"")+"'>"
+      + "<td><strong>"+log.nickname+"</strong>"
+      + (log.userType==="trial" ? "<span class='badge badge-amber' style='font-size:10px;margin-left:4px'>試用</span>" : "")
+      + (isSelf ? "<span style='font-size:10px;color:var(--primary);margin-left:4px'>(我)</span>" : "")
+      + "</td>"
+      + "<td style='text-align:center'>"+(selected.size>0?selected.size:"—")+"</td>";
+    if (hasResult) {
+      html += "<td style='text-align:center'>"
+        + (selected.size>0 ? "<span class='stat-pill stat-hit'>"+hitCount+"</span>" : "—")
+        + "</td>";
+    }
+    html += "<td><div class='team-tags'>";
+    if (selected.size === 0) {
+      html += "<span style='color:var(--coral);font-size:12px'>封盤前未選隊</span>";
+    } else if (n === 0) {
+      GROUPS.forEach(g => {
+        TEAMS.filter(t=>t.group===g&&selected.has(t.teamId)).forEach(t => {
+          const isHit  = hasResult && advanced.has(t.teamId);
+          const isMiss = hasResult && !advanced.has(t.teamId);
+          html += "<span class='team-tag "+(isHit?"hit":isMiss?"miss":"")+"'>"
+            + "<span class='weighting-dot w"+t.weighting+"' style='width:14px;height:14px;font-size:9px'>"+t.weighting+"</span>"
+            + t.nameCht + "</span>";
+        });
+      });
+    } else {
+      matchups.forEach((pair,idx) => {
+        const [idA,idB] = pair;
+        const picked = selected.has(idA)?idA:selected.has(idB)?idB:null;
+        if (!picked) {
+          html += "<span class='team-tag miss'>組"+(idx+1)+" 未選</span>";
+        } else {
+          const t     = TEAMS.find(t=>t.teamId===picked);
+          const isHit = hasResult && advanced.has(picked);
+          const isMiss= hasResult && !advanced.has(picked);
+          html += "<span class='team-tag "+(isHit?"hit":isMiss?"miss":"")+"'>"
+            + "<span class='weighting-dot w"+(t?t.weighting:1)+"' style='width:14px;height:14px;font-size:9px'>"+(t?t.weighting:1)+"</span>"
+            + (t?t.nameCht:picked) + "</span>";
+        }
+      });
+    }
+    html += "</div></td></tr>";
+  });
+  html += "</tbody></table></div></div>";
+  if (hasResult && sorted.length > 0) {
+    const pl = sorted.filter(l=>l.userType!=="trial");
+    const avg = pl.length>0 ? (pl.reduce((s,l)=>{
+      const sel=new Set(l.selectedTeams||[]);
+      return s+[...sel].filter(id=>advanced.has(id)).length;
+    },0)/pl.length).toFixed(1) : 0;
+    html += "<div class='card' style='margin-top:8px'>"
+      + "<div class='card-title'>&#x1F4CA; 第 "+n+" 輪統計</div>"
+      + "<div style='font-size:13px'>參賽者平均命中：<strong style='color:var(--teal)'>"+avg+"</strong> / "+advanced.size+" 隊</div>"
+      + "</div>";
+  }
+  content.innerHTML = html;
+}
+</script>
+</body>
+</html>
