@@ -207,7 +207,8 @@ function updateProgress() {
 
 async function renderKnockout(content, n) {
   const resultSnap = await getDoc(doc(db, "results", String(n)));
-  const matchups   = resultSnap.exists() ? (resultSnap.data().matchups||[]) : [];
+  const rawMatchups = resultSnap.exists() ? (resultSnap.data().matchups||[]) : [];
+  const matchups    = rawMatchups.map(m => Array.isArray(m) ? m : [m.a||'', m.b||'']);
   const selected   = new Set(myPicks[n]||[]);
   const labels     = ["","32強","16強","8強","4強","冠軍決賽"];
   if (matchups.length===0) {
