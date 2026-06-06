@@ -705,16 +705,16 @@ async function renderResultContent(n) {
 
   } else {
     // 淘汰賽：先設定對戰組別，再勾選晉級隊伍
-    const advancedFromPrev = n === 1
-      ? null
-      : (await getDoc(doc(db, "results", String(n-1)))).data()?.advancedTeams || [];
+    const prevSnap         = await getDoc(doc(db, "results", String(n - 1)));
+    const advancedFromPrev = prevSnap.exists() ? (prevSnap.data().advancedTeams || []) : [];
+    const prevRoundLabel   = ["小組賽","32強","16強","8強","4強","冠軍決賽"][n - 1];
 
-    // 可選隊伍來源：若有上一輪晉級隊伍則用，否則顯示所有隊伍
-    const availTeams = advancedFromPrev && advancedFromPrev.length > 0
+    // 若上一輪有晉級隊伍則用，否則顯示全部隊伍並提示
+    const availTeams = advancedFromPrev.length > 0
       ? TEAMS.filter(t => advancedFromPrev.includes(t.teamId))
       : TEAMS;
 
-    const matchCounts = [0, 16, 8, 4, 2, 1];
+        const matchCounts = [0, 16, 8, 4, 2, 1];
     const matchCount  = matchCounts[n];
 
     html += `
