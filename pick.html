@@ -229,7 +229,7 @@ async function renderRound0(content, sealed, advanced, hasResult) {
       else if (isAdv)            cls = "advanced";
       else if (isElim)           cls = "eliminated";
       else if (!hasResult&&isSel)cls = "selected";
-      const onclick = canPick ? "onclick='toggleTeam0("" + t.teamId + "")'": "";
+      const onclick = canPick ? "onclick=\"toggleTeam0('" + t.teamId + "')\"" : "";
       html += "<div class='group-team " + cls + "' " + onclick + ">"
         + (canPick ? "<input type='checkbox' " + (isSel?"checked":"") + ">" : "")
         + "<span class='weighting-dot w" + t.weighting + "'>" + t.weighting + "</span>"
@@ -314,7 +314,7 @@ function buildMuBlock(pair, advanced, selected, n, idx, canPick) {
     else if (!hasResult&&isSel) cls = "mu-team selected";
     else                        cls = "mu-team";
     const onclick = canPick
-      ? "onclick='selectKnockout(" + n + ",\"" + t.teamId + "\",\"" + (side==="a"?idB:idA) + "\")'"
+      ? "onclick=\"selectKnockout(" + n + ",'" + t.teamId + "','" + (side==="a"?idB:idA) + "')\"" 
       : "";
     return "<div class='" + cls + "' " + onclick + ">"
       + (canPick ? "<input type='radio' name='mu_" + n + "_" + idx + "' " + (isSel?"checked":"") + ">" : "")
