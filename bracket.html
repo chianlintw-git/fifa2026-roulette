@@ -115,7 +115,8 @@ window.loadAll = async () => {
 
     // 第1~5輪
     for (let n = 1; n <= 5; n++) {
-      const mu   = results[n].matchups || [];
+      // 相容物件格式和陣列格式
+    const mu   = (results[n].matchups || []).map(m => Array.isArray(m) ? m : [m.a||"", m.b||""]);
       const advN = new Set(results[n].advancedTeams || []);
       const sb   = advN.size > 0 ? bdg("teal", "已公布 " + advN.size + " 隊晉級")
                  : mu.length > 0 ? bdg("primary", "對戰組合已設定")

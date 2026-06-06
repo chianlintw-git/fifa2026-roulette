@@ -589,7 +589,10 @@ async function loadResultContent(n) {
   const resultData = resultSnap.exists() ? resultSnap.data() : { advancedTeams:[], matchups:[] };
 
   advancedSets[n] = new Set(resultData.advancedTeams || []);
-  matchupData[n]  = resultData.matchups || [];
+  // 相容新格式（物件）和舊格式（陣列）
+  matchupData[n]  = (resultData.matchups || []).map(m =>
+    Array.isArray(m) ? m : [m.a || "", m.b || ""]
+  );
 
   document.getElementById("results-loading").style.display = "none";
   document.getElementById("results-content").style.display = "block";
@@ -948,8 +951,10 @@ window.saveMatchups = async (n) => {
   collectMatchups(n);
   const msg = document.getElementById("results-msg");
   try {
+    // Firestore 不支援巢狀陣列，轉成物件陣列儲存
+    const matchupsToSave = matchupData[n].map(pair => ({ a: pair[0] || "", b: pair[1] || "" }));
     await updateDoc(doc(db, "results", String(n)), {
-      matchups:  matchupData[n],
+      matchups:  matchupsToSave,
       updatedAt: serverTimestamp()
     });
     msg.className   = "alert alert-success";
