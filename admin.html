@@ -103,7 +103,6 @@
   <div class="navbar-nav">
     <span class="navbar-user" id="nav-nickname"></span>
     <a href="main.html">🏆 排行榜</a>
-    <a href="bracket.html">📊 戰績</a>
     <a href="pick.html">🎯 選隊</a>
     <a href="profile.html">👤 設定</a>
     <a href="admin.html" id="nav-admin" class="active">⚙️ 管理</a>
@@ -235,7 +234,7 @@
       <div id="log-sub-picks">
         <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:12px" id="log-round-tabs"></div>
         <div style="display:flex; gap:8px; margin-bottom:14px; flex-wrap:wrap" id="log-actions">
-          <button class="btn btn-teal btn-sm" id="btn-seal-log" onclick="sealLog()">🔏 產出本輪封盤記錄</button>
+          <button class="btn btn-teal btn-sm" onclick="sealLog(currentLogRound)">🔏 產出本輪封盤記錄</button>
           <button class="btn btn-outline btn-sm" onclick="exportCSV()">⬇ 匯出 CSV</button>
         </div>
         <div id="logs-loading" style="display:none" class="loading"><div class="spinner"></div>載入中...</div>
@@ -284,10 +283,6 @@ let currentUser   = null;
 let currentResultRound = 0;
 let advancedSets  = {};   // { "0": Set, "1": Set, ... }
 let matchupData   = {};   // { "1": [[idA,idB],...], ... }
-
-// teamId → nameCht 快速查表
-const TEAMS_MAP = {};
-TEAMS.forEach(t => { TEAMS_MAP[t.teamId] = t.nameCht; });
 
 // ─── 認證（僅管理員可進入）────────────────────────────
 onAuthStateChanged(auth, async (user) => {
@@ -589,10 +584,7 @@ async function loadResultContent(n) {
   const resultData = resultSnap.exists() ? resultSnap.data() : { advancedTeams:[], matchups:[] };
 
   advancedSets[n] = new Set(resultData.advancedTeams || []);
-  // 相容新格式（物件）和舊格式（陣列）
-  matchupData[n]  = (resultData.matchups || []).map(m =>
-    Array.isArray(m) ? m : [m.a || "", m.b || ""]
-  );
+  matchupData[n]  = resultData.matchups || [];
 
   document.getElementById("results-loading").style.display = "none";
   document.getElementById("results-content").style.display = "block";
@@ -710,30 +702,21 @@ async function renderResultContent(n) {
     });
 
   } else {
-    // 淘汰賽：所有輪次統一從上一輪晉級隊伍取得
-    const prevSnap         = await getDoc(doc(db, "results", String(n - 1)));
-    const advancedFromPrev = prevSnap.exists() ? (prevSnap.data().advancedTeams || []) : [];
+    // 淘汰賽：先設定對戰組別，再勾選晉級隊伍
+    const advancedFromPrev = n === 1
+      ? null
+      : (await getDoc(doc(db, "results", String(n-1)))).data()?.advancedTeams || [];
 
-    // 若上一輪有晉級隊伍則用，否則顯示全部隊伍並提示
-    const availTeams = advancedFromPrev.length > 0
+    // 可選隊伍來源：若有上一輪晉級隊伍則用，否則顯示所有隊伍
+    const availTeams = advancedFromPrev && advancedFromPrev.length > 0
       ? TEAMS.filter(t => advancedFromPrev.includes(t.teamId))
       : TEAMS;
 
-    const prevRoundLabel = ["小組賽","32強","16強","8強","4強","冠軍決賽"][n - 1];
-    console.log(`[DEBUG] round=${n}, prevAdv=${advancedFromPrev.length}, availTeams=${availTeams.length}`);
     const matchCounts = [0, 16, 8, 4, 2, 1];
     const matchCount  = matchCounts[n];
 
     html += `
       <div style="margin-bottom:16px">
-        ${advancedFromPrev.length === 0
-          ? `<div class="alert alert-warning" style="margin-bottom:10px">
-               ⚠ 第 ${n-1} 輪（${prevRoundLabel}）尚未設定晉級隊伍，目前顯示全部 48 隊。
-               請先完成上一輪設定再回來。
-             </div>`
-          : `<div class="alert alert-info" style="margin-bottom:10px">
-               ✓ 從第 ${n-1} 輪（${prevRoundLabel}）晉級的 <strong>${advancedFromPrev.length}</strong> 支隊伍中設定對戰。
-             </div>`}
         <p style="font-size:13px; color:var(--text-sub); margin-bottom:10px">
           <strong>步驟 1：</strong>設定 ${matchCount} 組對戰組別
         </p>`;
@@ -741,26 +724,15 @@ async function renderResultContent(n) {
     // 顯示現有 matchups
     for (let i = 0; i < matchCount; i++) {
       const pair  = matchupData[n][i] || ["", ""];
-      // 收集所有已被其他組選用的隊伍（排除本組自己）
-      const usedByOthers = new Set();
-      matchupData[n].forEach((otherPair, oi) => {
-        if (oi === i) return;  // 跳過本組
-        if (otherPair[0]) usedByOthers.add(otherPair[0]);
-        if (otherPair[1]) usedByOthers.add(otherPair[1]);
-      });
-
-      const optsA = availTeams.map(t => {
-        const isSelected = pair[0] === t.teamId;
-        const isUsed     = usedByOthers.has(t.teamId);
-        return `<option value="${t.teamId}" ${isSelected?"selected":""} ${isUsed&&!isSelected?"disabled":""}>` +
-          `${t.nameCht}${isUsed&&!isSelected?" (已選用)":""}</option>`;
-      }).join("");
-      const optsB = availTeams.map(t => {
-        const isSelected = pair[1] === t.teamId;
-        const isUsed     = usedByOthers.has(t.teamId);
-        return `<option value="${t.teamId}" ${isSelected?"selected":""} ${isUsed&&!isSelected?"disabled":""}>` +
-          `${t.nameCht}${isUsed&&!isSelected?" (已選用)":""}</option>`;
-      }).join("");
+      const opts  = availTeams.map(t =>
+        `<option value="${t.teamId}" ${pair[0]===t.teamId||pair[1]===t.teamId?"":""}>${t.nameCht}</option>`
+      ).join("");
+      const optsA = availTeams.map(t =>
+        `<option value="${t.teamId}" ${pair[0]===t.teamId?"selected":""}>${t.nameCht}</option>`
+      ).join("");
+      const optsB = availTeams.map(t =>
+        `<option value="${t.teamId}" ${pair[1]===t.teamId?"selected":""}>${t.nameCht}</option>`
+      ).join("");
 
       html += `
         <div class="matchup-row">
@@ -886,8 +858,7 @@ window.toggleResult = async (n, teamId, maxPer, otherId) => {
 };
 
 // 更新 matchup 資料
-// 只更新資料，不重新渲染（供 saveMatchups 呼叫）
-function collectMatchups(n) {
+window.updateMatchup = (n) => {
   const matchCounts = [0, 16, 8, 4, 2, 1];
   const matchups    = [];
   for (let i = 0; i < matchCounts[n]; i++) {
@@ -897,64 +868,15 @@ function collectMatchups(n) {
     else matchups.push(["", ""]);
   }
   matchupData[n] = matchups;
-}
-
-// 更新資料並只重新渲染選單的 disabled 狀態（不重建整個畫面）
-window.updateMatchup = (n) => {
-  collectMatchups(n);
-  const matchCounts = [0, 16, 8, 4, 2, 1];
-  const count = matchCounts[n];
-
-  // 收集目前所有已選用的隊伍
-  for (let i = 0; i < count; i++) {
-    const usedByOthers = new Set();
-    matchupData[n].forEach((pair, oi) => {
-      if (oi === i) return;
-      if (pair[0]) usedByOthers.add(pair[0]);
-      if (pair[1]) usedByOthers.add(pair[1]);
-    });
-
-    // 更新 A 選單的 disabled 狀態
-    const selA = document.getElementById(`mu_${n}_${i}_a`);
-    const selB = document.getElementById(`mu_${n}_${i}_b`);
-    if (!selA || !selB) continue;
-
-    const currentA = selA.value;
-    const currentB = selB.value;
-
-    Array.from(selA.options).forEach(opt => {
-      if (!opt.value) return;
-      // 被其他組用 OR 被同組 B 選了
-      const blockedByOther = usedByOthers.has(opt.value);
-      const blockedByB     = opt.value === currentB;
-      const blocked = (blockedByOther || blockedByB) && opt.value !== currentA;
-      opt.disabled = blocked;
-      opt.textContent = (TEAMS_MAP[opt.value] || opt.value) +
-        (blocked ? (blockedByOther ? " (已選用)" : " (已選於右側)") : "");
-    });
-
-    Array.from(selB.options).forEach(opt => {
-      if (!opt.value) return;
-      // 被其他組用 OR 被同組 A 選了
-      const blockedByOther = usedByOthers.has(opt.value);
-      const blockedByA     = opt.value === currentA;
-      const blocked = (blockedByOther || blockedByA) && opt.value !== currentB;
-      opt.disabled = blocked;
-      opt.textContent = (TEAMS_MAP[opt.value] || opt.value) +
-        (blocked ? (blockedByOther ? " (已選用)" : " (已選於左側)") : "");
-    });
-  }
 };
 
 // 儲存對戰組別
 window.saveMatchups = async (n) => {
-  collectMatchups(n);
+  updateMatchup(n);
   const msg = document.getElementById("results-msg");
   try {
-    // Firestore 不支援巢狀陣列，轉成物件陣列儲存
-    const matchupsToSave = matchupData[n].map(pair => ({ a: pair[0] || "", b: pair[1] || "" }));
     await updateDoc(doc(db, "results", String(n)), {
-      matchups:  matchupsToSave,
+      matchups:  matchupData[n],
       updatedAt: serverTimestamp()
     });
     msg.className   = "alert alert-success";
@@ -1023,13 +945,19 @@ window.calcRound = async (n) => {
   msg.style.display = "none";
 
   try {
+    // 最優先：讀取系統模式，決定所有 collection 名稱
+    const sysSnap  = await getDoc(doc(db, "settings", "system"));
+    const sysMode  = sysSnap.exists() ? (sysSnap.data().mode || "trial") : "trial";
+    const scoreCol = sysMode === "trial" ? "scores_trial" : "scores";
+    const picksCol = sysMode === "trial" ? "picks_trial"  : "picks";
+
     // 取得晉級隊伍
     const resultSnap = await getDoc(doc(db, "results", String(n)));
     if (!resultSnap.exists()) throw new Error("找不到比賽結果，請先設定晉級隊伍。");
     const advanced = new Set(resultSnap.data().advancedTeams || []);
     if (advanced.size === 0) throw new Error("晉級隊伍尚未設定，請先在「比賽結果」頁填入。");
 
-    // 取得所有使用者的選擇
+    // 取得所有使用者的選擇並計算積分
     const usersSnap = await getDocs(collection(db, "users"));
     const batch     = writeBatch(db);
     let   calcCount = 0;
@@ -1037,7 +965,7 @@ window.calcRound = async (n) => {
     for (const userDoc of usersSnap.docs) {
       if (userDoc.id === "_schema") continue;
       const uid      = userDoc.id;
-      const pickSnap = await getDoc(doc(db, "picks", `${uid}_${n}`));
+      const pickSnap = await getDoc(doc(db, picksCol, `${uid}_${n}`));
       const picks    = pickSnap.exists() ? (pickSnap.data().selectedTeams || []) : [];
 
       let roundScore = 0;
@@ -1045,15 +973,11 @@ window.calcRound = async (n) => {
         if (!advanced.has(teamId)) return;
         const team = TEAMS.find(t => t.teamId === teamId);
         if (!team) return;
-        if (n === 0) {
-          roundScore += 1;                           // 小組賽：每隊 +1 分
-        } else {
-          roundScore += team.weighting * n;          // 淘汰賽：基準分 × 輪次倍數
-        }
+        roundScore += n === 0 ? 1 : team.weighting * n;
       });
 
-      // 讀取現有積分，累加
-      const scoreSnap = await getDoc(doc(db, "scores", uid));
+      // 讀取現有積分並更新
+      const scoreSnap = await getDoc(doc(db, scoreCol, uid));
       const existing  = scoreSnap.exists() ? scoreSnap.data() : {};
       const updated   = {
         uid,
@@ -1066,53 +990,44 @@ window.calcRound = async (n) => {
         [`round${n}`]: roundScore,
         lastCalcAt: serverTimestamp()
       };
-      updated.total =
-        updated.round0 + updated.round1 + updated.round2 +
-        updated.round3 + updated.round4 + updated.round5;
-
+      updated.total = updated.round0 + updated.round1 + updated.round2 +
+                      updated.round3 + updated.round4 + updated.round5;
       batch.set(doc(db, scoreCol, uid), updated);
       calcCount++;
     }
-
     await batch.commit();
 
-    // 依模式決定 scores collection
-    const sysSnap  = await getDoc(doc(db, "settings", "system"));
-    const sysMode  = sysSnap.exists() ? (sysSnap.data().mode || "trial") : "trial";
-    const scoreCol = sysMode === "trial" ? "scores_trial" : "scores";
-
-    // 同步寫入 score_logs：記錄本次計算後每位使用者的總積分快照
+    // 寫入 score_logs 快照
     const calcTime  = new Date();
     const logBatch  = writeBatch(db);
-    // 重新讀取剛寫入的 scores 產出 log
     const allScores = await getDocs(collection(db, scoreCol));
     const allUsers  = await getDocs(collection(db, "users"));
     const userMap   = {};
     allUsers.forEach(d => { if (d.id !== "_schema") userMap[d.id] = d.data(); });
-
     allScores.forEach(d => {
-      const s   = d.data();
-      const u   = userMap[d.id] || {};
+      const s = d.data();
+      const u = userMap[d.id] || {};
       logBatch.set(doc(db, "score_logs", `${d.id}_round${n}`), {
-        uid:        d.id,
-        nickname:   u.nickname  || "",
-        email:      u.email     || "",
-        userType:   u.userType  || "player",
-        calcRound:  n,
-        round0:     s.round0 || 0,
-        round1:     s.round1 || 0,
-        round2:     s.round2 || 0,
-        round3:     s.round3 || 0,
-        round4:     s.round4 || 0,
-        round5:     s.round5 || 0,
-        total:      s.total  || 0,
-        calcAt:     calcTime
+        uid:       d.id,
+        nickname:  u.nickname  || "",
+        email:     u.email     || "",
+        userType:  u.userType  || "player",
+        calcRound: n,
+        round0:    s.round0 || 0,
+        round1:    s.round1 || 0,
+        round2:    s.round2 || 0,
+        round3:    s.round3 || 0,
+        round4:    s.round4 || 0,
+        round5:    s.round5 || 0,
+        total:     s.total  || 0,
+        calcAt:    calcTime,
+        mode:      sysMode
       });
     });
     await logBatch.commit();
 
     msg.className   = "alert alert-success";
-    msg.textContent = `✓ 第 ${n} 輪積分計算完成！共計算 ${calcCount} 位使用者，積分記錄已儲存。`;
+    msg.textContent = `✓ 第 ${n} 輪積分計算完成！共計算 ${calcCount} 位使用者（${sysMode === "trial" ? "試用模式" : "正式模式"}）。`;
     msg.style.display = "block";
 
   } catch(e) {
@@ -1124,6 +1039,7 @@ window.calcRound = async (n) => {
   btn.disabled    = false;
   btn.textContent = "計算積分";
 };
+
 
 // ═══════════════════════════════════════════════════════
 // ⑤ 封盤記錄
@@ -1242,8 +1158,7 @@ function formatTW(date) {
 }
 
 // 產出封盤記錄：快照所有使用者本輪的 picks 寫入 logs collection
-window.sealLog = async () => {
-  const n = currentLogRound;
+window.sealLog = async (n) => {
   if (!confirm(`確定要產出第 ${n} 輪封盤記錄？此操作將覆蓋既有記錄。`)) return;
 
   document.getElementById("logs-loading").style.display = "block";
@@ -1260,14 +1175,9 @@ window.sealLog = async () => {
     const sealedAt = new Date();
     const batch    = writeBatch(db);
 
-    // 依系統模式讀取對應 collection
-    const sysSnap  = await getDoc(doc(db, "settings", "system"));
-    const sysMode  = sysSnap.exists() ? (sysSnap.data().mode || "trial") : "trial";
-    const picksCol = sysMode === "trial" ? "picks_trial" : "picks";
-
     for (const u of users) {
       const uid      = u.id;
-      const pickSnap = await getDoc(doc(db, picksCol, `${uid}_${n}`));
+      const pickSnap = await getDoc(doc(db, "picks", `${uid}_${n}`));
       const pickData = pickSnap.exists() ? pickSnap.data() : null;
       const selected = pickData?.selectedTeams || [];
 
