@@ -907,22 +907,29 @@ window.updateMatchup = (n) => {
     const selB = document.getElementById(`mu_${n}_${i}_b`);
     if (!selA || !selB) continue;
 
+    const currentA = selA.value;
+    const currentB = selB.value;
+
     Array.from(selA.options).forEach(opt => {
       if (!opt.value) return;
-      const isUsed = usedByOthers.has(opt.value);
-      opt.disabled = isUsed && opt.value !== selA.value;
-      opt.textContent = opt.value
-        ? (TEAMS_MAP[opt.value] || opt.value) + (isUsed && opt.value !== selA.value ? " (已選用)" : "")
-        : "— 選擇隊伍 —";
+      // 被其他組用 OR 被同組 B 選了
+      const blockedByOther = usedByOthers.has(opt.value);
+      const blockedByB     = opt.value === currentB;
+      const blocked = (blockedByOther || blockedByB) && opt.value !== currentA;
+      opt.disabled = blocked;
+      opt.textContent = (TEAMS_MAP[opt.value] || opt.value) +
+        (blocked ? (blockedByOther ? " (已選用)" : " (已選於右側)") : "");
     });
 
     Array.from(selB.options).forEach(opt => {
       if (!opt.value) return;
-      const isUsed = usedByOthers.has(opt.value);
-      opt.disabled = isUsed && opt.value !== selB.value;
-      opt.textContent = opt.value
-        ? (TEAMS_MAP[opt.value] || opt.value) + (isUsed && opt.value !== selB.value ? " (已選用)" : "")
-        : "— 選擇隊伍 —";
+      // 被其他組用 OR 被同組 A 選了
+      const blockedByOther = usedByOthers.has(opt.value);
+      const blockedByA     = opt.value === currentA;
+      const blocked = (blockedByOther || blockedByA) && opt.value !== currentB;
+      opt.disabled = blocked;
+      opt.textContent = (TEAMS_MAP[opt.value] || opt.value) +
+        (blocked ? (blockedByOther ? " (已選用)" : " (已選於左側)") : "");
     });
   }
 };
