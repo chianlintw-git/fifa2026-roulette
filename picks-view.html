@@ -128,13 +128,13 @@ function renderRound(n) {
   const sealed   = round?.status === "close";
   const labels   = ["小組賽","32強淘汰賽","16強淘汰賽","8強淘汰賽","4強淘汰賽","冠軍決賽"];
   if (!sealed) {
-    content.innerHTML = "<div class='card'><div class='alert alert-warning' style='margin-bottom:0'>")
+    content.innerHTML = "<div class='card'><div class='alert alert-warning' style='margin-bottom:0'>"
       + "&#x1F512; 第"+n+"輪（"+labels[n]+"）尚未封盤，封盤後才會顯示各人選隊結果。</div></div>";
     return;
   }
   const logs = logsData[n] || [];
   if (logs.length === 0) {
-    content.innerHTML = "<div class='card'><div class='alert alert-warning' style='margin-bottom:0'>")
+    content.innerHTML = "<div class='card'><div class='alert alert-warning' style='margin-bottom:0'>"
       + "&#x26A0; 管理員尚未產出本輪封盤記錄，請管理員至「封盤記錄」頁產出。</div></div>";
     return;
   }
