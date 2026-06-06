@@ -235,7 +235,7 @@
       <div id="log-sub-picks">
         <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:12px" id="log-round-tabs"></div>
         <div style="display:flex; gap:8px; margin-bottom:14px; flex-wrap:wrap" id="log-actions">
-          <button class="btn btn-teal btn-sm" onclick="sealLog(currentLogRound)">🔏 產出本輪封盤記錄</button>
+          <button class="btn btn-teal btn-sm" id="btn-seal-log" onclick="sealLog()">🔏 產出本輪封盤記錄</button>
           <button class="btn btn-outline btn-sm" onclick="exportCSV()">⬇ 匯出 CSV</button>
         </div>
         <div id="logs-loading" style="display:none" class="loading"><div class="spinner"></div>載入中...</div>
@@ -1242,7 +1242,8 @@ function formatTW(date) {
 }
 
 // 產出封盤記錄：快照所有使用者本輪的 picks 寫入 logs collection
-window.sealLog = async (n) => {
+window.sealLog = async () => {
+  const n = currentLogRound;
   if (!confirm(`確定要產出第 ${n} 輪封盤記錄？此操作將覆蓋既有記錄。`)) return;
 
   document.getElementById("logs-loading").style.display = "block";
@@ -1259,9 +1260,14 @@ window.sealLog = async (n) => {
     const sealedAt = new Date();
     const batch    = writeBatch(db);
 
+    // 依系統模式讀取對應 collection
+    const sysSnap  = await getDoc(doc(db, "settings", "system"));
+    const sysMode  = sysSnap.exists() ? (sysSnap.data().mode || "trial") : "trial";
+    const picksCol = sysMode === "trial" ? "picks_trial" : "picks";
+
     for (const u of users) {
       const uid      = u.id;
-      const pickSnap = await getDoc(doc(db, "picks", `${uid}_${n}`));
+      const pickSnap = await getDoc(doc(db, picksCol, `${uid}_${n}`));
       const pickData = pickSnap.exists() ? pickSnap.data() : null;
       const selected = pickData?.selectedTeams || [];
 
