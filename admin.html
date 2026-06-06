@@ -285,6 +285,10 @@ let currentResultRound = 0;
 let advancedSets  = {};   // { "0": Set, "1": Set, ... }
 let matchupData   = {};   // { "1": [[idA,idB],...], ... }
 
+// teamId → nameCht 快速查表
+const TEAMS_MAP = {};
+TEAMS.forEach(t => { TEAMS_MAP[t.teamId] = t.nameCht; });
+
 // ─── 認證（僅管理員可進入）────────────────────────────
 onAuthStateChanged(auth, async (user) => {
   console.log("[AUTH] start", user?.uid);
@@ -883,10 +887,44 @@ function collectMatchups(n) {
   matchupData[n] = matchups;
 }
 
-// 更新資料並重新渲染（讓 disabled 即時生效）
-window.updateMatchup = async (n) => {
+// 更新資料並只重新渲染選單的 disabled 狀態（不重建整個畫面）
+window.updateMatchup = (n) => {
   collectMatchups(n);
-  await renderResultContent(n);
+  const matchCounts = [0, 16, 8, 4, 2, 1];
+  const count = matchCounts[n];
+
+  // 收集目前所有已選用的隊伍
+  for (let i = 0; i < count; i++) {
+    const usedByOthers = new Set();
+    matchupData[n].forEach((pair, oi) => {
+      if (oi === i) return;
+      if (pair[0]) usedByOthers.add(pair[0]);
+      if (pair[1]) usedByOthers.add(pair[1]);
+    });
+
+    // 更新 A 選單的 disabled 狀態
+    const selA = document.getElementById(`mu_${n}_${i}_a`);
+    const selB = document.getElementById(`mu_${n}_${i}_b`);
+    if (!selA || !selB) continue;
+
+    Array.from(selA.options).forEach(opt => {
+      if (!opt.value) return;
+      const isUsed = usedByOthers.has(opt.value);
+      opt.disabled = isUsed && opt.value !== selA.value;
+      opt.textContent = opt.value
+        ? (TEAMS_MAP[opt.value] || opt.value) + (isUsed && opt.value !== selA.value ? " (已選用)" : "")
+        : "— 選擇隊伍 —";
+    });
+
+    Array.from(selB.options).forEach(opt => {
+      if (!opt.value) return;
+      const isUsed = usedByOthers.has(opt.value);
+      opt.disabled = isUsed && opt.value !== selB.value;
+      opt.textContent = opt.value
+        ? (TEAMS_MAP[opt.value] || opt.value) + (isUsed && opt.value !== selB.value ? " (已選用)" : "")
+        : "— 選擇隊伍 —";
+    });
+  }
 };
 
 // 儲存對戰組別
