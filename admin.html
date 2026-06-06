@@ -578,6 +578,7 @@ async function loadResultRoundTabs() {
 }
 
 async function loadResultContent(n) {
+  console.log("[DEBUG] loadResultContent called with n=", n);
   document.getElementById("results-loading").style.display = "block";
   document.getElementById("results-content").style.display = "none";
   document.getElementById("results-msg").style.display     = "none";
@@ -652,6 +653,7 @@ function updateResultFooter(n) {
 }
 
 async function renderResultContent(n) {
+  console.log("[DEBUG] renderResultContent called with n=", n);
   updateResultFooter(n);
   let html = "";
 
