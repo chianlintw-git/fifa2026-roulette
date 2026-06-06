@@ -281,6 +281,10 @@ import {
   collection, writeBatch, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
+
+// teamId → nameCht 快速查表
+const TEAMS_MAP = {};
+TEAMS.forEach(t => { TEAMS_MAP[t.teamId] = t.nameCht; });
 let currentUser   = null;
 let currentResultRound = 0;
 let advancedSets  = {};   // { "0": Set, "1": Set, ... }
@@ -587,7 +591,10 @@ async function loadResultContent(n) {
   const resultData = resultSnap.exists() ? resultSnap.data() : { advancedTeams:[], matchups:[] };
 
   advancedSets[n] = new Set(resultData.advancedTeams || []);
-  matchupData[n]  = resultData.matchups || [];
+  // 相容物件格式 {a,b} 和陣列格式 [a,b]
+  matchupData[n]  = (resultData.matchups || []).map(m =>
+    Array.isArray(m) ? m : [m.a || "", m.b || ""]
+  );
 
   document.getElementById("results-loading").style.display = "none";
   document.getElementById("results-content").style.display = "block";
@@ -653,7 +660,7 @@ function updateResultFooter(n) {
 }
 
 async function renderResultContent(n) {
-  console.log("[DEBUG] renderResultContent called with n=", n);
+  console.log("[DEBUG] renderResultContent called with n=", n, "advancedSets[n].size=", advancedSets[n]?.size, "matchupData[n]=", JSON.stringify(matchupData[n]?.slice(0,2)));
   updateResultFooter(n);
   let html = "";
 
@@ -863,15 +870,53 @@ window.toggleResult = async (n, teamId, maxPer, otherId) => {
 
 // 更新 matchup 資料
 window.updateMatchup = (n) => {
+  // 1. 先收集目前所有選單的值，存成陣列格式
   const matchCounts = [0, 16, 8, 4, 2, 1];
   const matchups    = [];
   for (let i = 0; i < matchCounts[n]; i++) {
-    const a = document.getElementById(`mu_${n}_${i}_a`)?.value;
-    const b = document.getElementById(`mu_${n}_${i}_b`)?.value;
-    if (a && b) matchups.push([a, b]);
-    else matchups.push(["", ""]);
+    const a = document.getElementById(`mu_${n}_${i}_a`)?.value || "";
+    const b = document.getElementById(`mu_${n}_${i}_b`)?.value || "";
+    matchups.push([a, b]);
   }
   matchupData[n] = matchups;
+
+  // 2. 更新各選單的 disabled 狀態（不重新渲染 DOM）
+  for (let i = 0; i < matchCounts[n]; i++) {
+    const selA = document.getElementById(`mu_${n}_${i}_a`);
+    const selB = document.getElementById(`mu_${n}_${i}_b`);
+    if (!selA || !selB) continue;
+
+    // 收集其他組已選用的隊伍
+    const usedByOthers = new Set();
+    matchupData[n].forEach((pair, oi) => {
+      if (oi === i) return;
+      if (pair[0]) usedByOthers.add(pair[0]);
+      if (pair[1]) usedByOthers.add(pair[1]);
+    });
+
+    const curA = selA.value;
+    const curB = selB.value;
+
+    Array.from(selA.options).forEach(opt => {
+      if (!opt.value) return;
+      const blockedByOther = usedByOthers.has(opt.value);
+      const blockedByB     = opt.value === curB;
+      const blocked = (blockedByOther || blockedByB) && opt.value !== curA;
+      opt.disabled = blocked;
+      opt.textContent = (TEAMS_MAP[opt.value] || opt.value) +
+        (blocked ? (blockedByOther ? " (已選用)" : " (已選於右側)") : "");
+    });
+
+    Array.from(selB.options).forEach(opt => {
+      if (!opt.value) return;
+      const blockedByOther = usedByOthers.has(opt.value);
+      const blockedByA     = opt.value === curA;
+      const blocked = (blockedByOther || blockedByA) && opt.value !== curB;
+      opt.disabled = blocked;
+      opt.textContent = (TEAMS_MAP[opt.value] || opt.value) +
+        (blocked ? (blockedByOther ? " (已選用)" : " (已選於左側)") : "");
+    });
+  }
 };
 
 // 儲存對戰組別
@@ -879,8 +924,13 @@ window.saveMatchups = async (n) => {
   updateMatchup(n);
   const msg = document.getElementById("results-msg");
   try {
+    // 轉成物件格式儲存（Firestore 不支援巢狀陣列）
+    const matchupsToSave = matchupData[n].map(pair => ({
+      a: pair[0] || "",
+      b: pair[1] || ""
+    }));
     await updateDoc(doc(db, "results", String(n)), {
-      matchups:  matchupData[n],
+      matchups:  matchupsToSave,
       updatedAt: serverTimestamp()
     });
     msg.className   = "alert alert-success";
