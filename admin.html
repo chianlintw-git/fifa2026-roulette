@@ -870,7 +870,8 @@ window.toggleResult = async (n, teamId, maxPer, otherId) => {
 };
 
 // 更新 matchup 資料
-window.updateMatchup = (n) => {
+// 只更新資料，不重新渲染（供 saveMatchups 呼叫）
+function collectMatchups(n) {
   const matchCounts = [0, 16, 8, 4, 2, 1];
   const matchups    = [];
   for (let i = 0; i < matchCounts[n]; i++) {
@@ -880,11 +881,17 @@ window.updateMatchup = (n) => {
     else matchups.push(["", ""]);
   }
   matchupData[n] = matchups;
+}
+
+// 更新資料並重新渲染（讓 disabled 即時生效）
+window.updateMatchup = async (n) => {
+  collectMatchups(n);
+  await renderResultContent(n);
 };
 
 // 儲存對戰組別
 window.saveMatchups = async (n) => {
-  updateMatchup(n);
+  collectMatchups(n);
   const msg = document.getElementById("results-msg");
   try {
     await updateDoc(doc(db, "results", String(n)), {
