@@ -84,12 +84,12 @@ window.loadAll = async () => {
     }
     const RL = ["","串強","十六強","八強","四強","冠軍決賽"];
     const RLF = ["","32強","十六強","八強","四強","冠軍決賽"];
-    const TC  = ["","32←16隊","16←8隊","8←4隊","4←2隊","2隊决冠軍"];
+    const TC  = ["","32→16隊","16→8隊","8→4隊","4→2隊","2隊决冠軍"];
     let html = "";
 
     // 第0輪小組賽
     const adv0 = new Set(results[0].advancedTeams || []);
-    html += rh(0, "小組賽", "48←32隊",
+    html += rh(0, "小組賽", "48→32隊",
       adv0.size > 0 ? bdg("teal", "已公布 " + adv0.size + " 隊晉級") : bdg("gray", "尚未公布"));
     if (!adv0.size) {
       html += pend("小組賽結果尚未公布");
