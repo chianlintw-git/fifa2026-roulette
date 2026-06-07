@@ -231,14 +231,18 @@ async function loadScores() {
       const u = d.data();
       if (d.id === "_schema" || !u.isApproved) return;
       const lookupId = u.uid || d.id;
-      const s = scoresMap[lookupId] || {};
+      const s        = scoresMap[lookupId];  // undefined 代表無積分記錄
+      const hasScore = !!s;
       allRows.push({
         uid: u.uid || d.id, nickname: u.nickname,
         userType: u.userType || "player",
-        total:  s.total  || 0, round0: s.round0 || 0,
-        round1: s.round1 || 0, round2: s.round2 || 0,
-        round3: s.round3 || 0, round4: s.round4 || 0,
-        round5: s.round5 || 0,
+        total:  hasScore ? (s.total  ?? 0) : null,
+        round0: hasScore ? (s.round0 ?? null) : null,
+        round1: hasScore ? (s.round1 ?? null) : null,
+        round2: hasScore ? (s.round2 ?? null) : null,
+        round3: hasScore ? (s.round3 ?? null) : null,
+        round4: hasScore ? (s.round4 ?? null) : null,
+        round5: hasScore ? (s.round5 ?? null) : null,
       });
     });
 
@@ -256,8 +260,12 @@ function renderTable() {
   document.getElementById("total-count").textContent = rows.length;
   rows.sort((a,b) => {
     let va = a[sortKey], vb = b[sortKey];
-    if (typeof va === "string") va = va.localeCompare(vb, "zh-TW"); else va = va - vb;
-    return sortAsc ? va : -va;
+    // null 排在最後
+    if (va === null && vb === null) return 0;
+    if (va === null) return 1;
+    if (vb === null) return -1;
+    if (typeof va === "string") return sortAsc ? va.localeCompare(vb,"zh-TW") : vb.localeCompare(va,"zh-TW");
+    return sortAsc ? va - vb : vb - va;
   });
   let rank = 1;
   rows.forEach((r,i) => {
