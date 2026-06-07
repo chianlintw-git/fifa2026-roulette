@@ -1147,7 +1147,7 @@ window.calcRound = async (n) => {
 
       let roundScore = 0;
       picks.forEach(teamId => {
-        if (!advanced.has(teamId)) return;
+        if (!advancedSet.has(teamId)) return;
         const team = TEAMS.find(t => t.teamId === teamId);
         if (!team) return;
         roundScore += n === 0 ? 1 : team.weighting * n;
