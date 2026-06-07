@@ -24,6 +24,10 @@
     .team-tag.miss{opacity:.5}
     .stat-pill{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:500}
     .stat-hit{background:var(--teal-light);color:#085041}
+    .picks-table th.sortable{cursor:pointer;user-select:none}
+    .picks-table th.sortable:hover{color:var(--primary)}
+    .picks-table th.sorted{color:var(--primary)}
+    .sort-icon{margin-left:4px;font-size:10px;opacity:.6}
     .sealed-badge{font-size:11px;padding:1px 7px;border-radius:10px;background:var(--teal-light);color:#085041;margin-left:6px;vertical-align:middle}
     .open-badge{font-size:11px;padding:1px 7px;border-radius:10px;background:var(--amber-light);color:#633806;margin-left:6px;vertical-align:middle}
   </style>
@@ -140,9 +144,38 @@ function renderRound(n) {
   const advanced  = new Set(resultsData[n]?.advancedTeams || []);
   const hasResult = advanced.size > 0;
   const matchups  = (resultsData[n]?.matchups||[]).map(m=>Array.isArray(m)?m:[m.a||"",m.b||""]);
-  const players   = logs.filter(l=>l.userType!=="trial").sort((a,b)=>a.nickname.localeCompare(b.nickname,"zh-TW"));
-  const trials    = logs.filter(l=>l.userType==="trial").sort((a,b)=>a.nickname.localeCompare(b.nickname,"zh-TW"));
+  // 計算每人的命中數和命中率供排序用
+  const maxPossible = n===0 ? 32 : matchups.length;
+  const logsWithStats = logs.map(l => {
+    const sel = new Set(l.selectedTeams||[]);
+    const hit = hasResult ? [...sel].filter(id=>advanced.has(id)).length : 0;
+    const pct = sel.size > 0 && hasResult ? Math.round(hit/maxPossible*100) : -1;
+    return { ...l, _count: sel.size, _hit: hit, _pct: pct };
+  });
+
+  // 排序
+  function sortLogs(arr) {
+    return arr.sort((a, b) => {
+      let va, vb;
+      if      (sortKey === "nickname") { va = a.nickname; vb = b.nickname; }
+      else if (sortKey === "count")    { va = a._count;   vb = b._count; }
+      else if (sortKey === "hit")      { va = a._hit;     vb = b._hit; }
+      else if (sortKey === "pct")      { va = a._pct;     vb = b._pct; }
+      else                             { va = a.nickname; vb = b.nickname; }
+      if (typeof va === "string") return sortAsc ? va.localeCompare(vb,"zh-TW") : vb.localeCompare(va,"zh-TW");
+      return sortAsc ? va - vb : vb - va;
+    });
+  }
+
+  const players   = sortLogs(logsWithStats.filter(l=>l.userType!=="trial"));
+  const trials    = sortLogs(logsWithStats.filter(l=>l.userType==="trial"));
   const sorted    = [...players, ...trials];
+  function thSort(key, label, style) {
+    const isSorted = sortKey === key;
+    const icon = isSorted ? (sortAsc ? " &#x25B2;" : " &#x25BC;") : " &#x21C5;";
+    return "<th class='sortable"+(isSorted?" sorted":"")+"' style='"+style+"' onclick='setSortKey(""+key+"")'>"
+      + label + "<span class='sort-icon'>"+icon+"</span></th>";
+  }
   let html = "<div class='card' style='padding:0;overflow:hidden'>"
     + "<div style='padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;flex-wrap:wrap'>"
     + "<span style='font-size:14px;font-weight:500'>第 "+n+" 輪："+labels[n]+"</span>"
@@ -150,26 +183,24 @@ function renderRound(n) {
     + (hasResult ? "<span class='sealed-badge'>&#x2713; 比賽結果已公布</span>" : "<span class='open-badge'>&#x2026; 比賽結果尚未公布</span>")
     + "<span style='font-size:12px;color:var(--text-sub);margin-left:auto'>"+sorted.length+" 位參賽者</span>"
     + "</div><div style='overflow-x:auto'><table class='picks-table'><thead><tr>"
-    + "<th style='width:90px'>暱稱</th>"
-    + "<th style='min-width:60px;text-align:center'>選隊數</th>"
-    + (hasResult ? "<th style='min-width:60px;text-align:center'>命中</th><th style='min-width:70px;text-align:center'>命中率</th>" : "")
+    + thSort("nickname","暱稱","width:90px")
+    + thSort("count","選隊數","min-width:60px;text-align:center")
+    + (hasResult ? thSort("hit","命中","min-width:60px;text-align:center")+thSort("pct","命中率","min-width:70px;text-align:center") : "")
     + "<th>選擇隊伍</th></tr></thead><tbody>";
   sorted.forEach(log => {
-    const isSelf   = log.uid === currentUser.uid;
+    const isSelf = log.uid === currentUser.uid;
     const selected = new Set(log.selectedTeams || []);
-    const hitCount = hasResult ? [...selected].filter(id=>advanced.has(id)).length : 0;
     html += "<tr class='"+(isSelf?"self":"")+"'>"
       + "<td><strong>"+log.nickname+"</strong>"
       + (log.userType==="trial" ? "<span class='badge badge-amber' style='font-size:10px;margin-left:4px'>試用</span>" : "")
       + (isSelf ? "<span style='font-size:10px;color:var(--primary);margin-left:4px'>(我)</span>" : "")
       + "</td>"
-      + "<td style='text-align:center'>"+(selected.size>0?selected.size:"—")+"</td>";
+      + "<td style='text-align:center'>"+(log._count>0?log._count:"—")+"</td>";
     if (hasResult) {
-      const hitPct = selected.size > 0 ? Math.round(hitCount / (n===0?32:matchups.length) * 100) : null;
       html += "<td style='text-align:center'>"
-        + (selected.size>0 ? "<span class='stat-pill stat-hit'>"+hitCount+"</span>" : "—")
+        + (log._count>0 ? "<span class='stat-pill stat-hit'>"+log._hit+"</span>" : "—")
         + "</td>"
-        + "<td style='text-align:center;font-weight:500;color:var(--primary)'>" + (hitPct!==null ? hitPct+"%" : "—") + "</td>";
+        + "<td style='text-align:center;font-weight:500;color:var(--primary)'>" + (log._pct>=0 ? log._pct+"%" : "—") + "</td>";
     }
     html += "<td><div class='team-tags'>";
     if (selected.size === 0) {
@@ -216,6 +247,16 @@ function renderRound(n) {
   }
   content.innerHTML = html;
 }
+
+// 排序切換
+window.setSortKey = (key) => {
+  if (sortKey === key) { sortAsc = !sortAsc; }
+  else {
+    sortKey = key;
+    sortAsc = key === "nickname";  // 文字欄預設升冪，數字欄預設降冪
+  }
+  renderRound(currentRound);
+};
 </script>
 </body>
 </html>
