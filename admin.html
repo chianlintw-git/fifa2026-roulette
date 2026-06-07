@@ -282,8 +282,12 @@ import {
 
 let currentUser   = null;
 let currentResultRound = 0;
-let advancedSets  = {};   // { "0": Set, "1": Set, ... }
-let matchupData   = {};   // { "1": [[idA,idB],...], ... }
+let advancedSets  = {};
+let matchupData   = {};
+
+// teamId → nameCht 快速查表
+const TEAMS_MAP = {};
+TEAMS.forEach(t => { TEAMS_MAP[t.teamId] = t.nameCht; });
 
 // ─── 認證（僅管理員可進入）────────────────────────────
 onAuthStateChanged(auth, async (user) => {
@@ -585,7 +589,10 @@ async function loadResultContent(n) {
   const resultData = resultSnap.exists() ? resultSnap.data() : { advancedTeams:[], matchups:[] };
 
   advancedSets[n] = new Set(resultData.advancedTeams || []);
-  matchupData[n]  = resultData.matchups || [];
+  // 相容物件格式 {a,b} 和陣列格式 [a,b]
+  matchupData[n]  = (resultData.matchups || []).map(m =>
+    Array.isArray(m) ? m : [m.a || "", m.b || ""]
+  );
 
   document.getElementById("results-loading").style.display = "none";
   document.getElementById("results-content").style.display = "block";
@@ -860,15 +867,48 @@ window.toggleResult = async (n, teamId, maxPer, otherId) => {
 
 // 更新 matchup 資料
 window.updateMatchup = (n) => {
+  // 1. 收集目前所有選單的值
   const matchCounts = [0, 16, 8, 4, 2, 1];
   const matchups    = [];
   for (let i = 0; i < matchCounts[n]; i++) {
-    const a = document.getElementById(`mu_${n}_${i}_a`)?.value;
-    const b = document.getElementById(`mu_${n}_${i}_b`)?.value;
-    if (a && b) matchups.push([a, b]);
-    else matchups.push(["", ""]);
+    const a = document.getElementById(`mu_${n}_${i}_a`)?.value || "";
+    const b = document.getElementById(`mu_${n}_${i}_b`)?.value || "";
+    matchups.push([a, b]);
   }
   matchupData[n] = matchups;
+
+  // 2. 更新各選單 disabled 狀態
+  for (let i = 0; i < matchCounts[n]; i++) {
+    const selA = document.getElementById(`mu_${n}_${i}_a`);
+    const selB = document.getElementById(`mu_${n}_${i}_b`);
+    if (!selA || !selB) continue;
+
+    const usedByOthers = new Set();
+    matchupData[n].forEach((pair, oi) => {
+      if (oi === i) return;
+      if (pair[0]) usedByOthers.add(pair[0]);
+      if (pair[1]) usedByOthers.add(pair[1]);
+    });
+
+    const curA = selA.value;
+    const curB = selB.value;
+
+    Array.from(selA.options).forEach(opt => {
+      if (!opt.value) return;
+      const blocked = (usedByOthers.has(opt.value) || opt.value === curB) && opt.value !== curA;
+      opt.disabled = blocked;
+      opt.textContent = (TEAMS_MAP[opt.value] || opt.value) +
+        (blocked ? (usedByOthers.has(opt.value) ? " (已選用)" : " (已選於右側)") : "");
+    });
+
+    Array.from(selB.options).forEach(opt => {
+      if (!opt.value) return;
+      const blocked = (usedByOthers.has(opt.value) || opt.value === curA) && opt.value !== curB;
+      opt.disabled = blocked;
+      opt.textContent = (TEAMS_MAP[opt.value] || opt.value) +
+        (blocked ? (usedByOthers.has(opt.value) ? " (已選用)" : " (已選於左側)") : "");
+    });
+  }
 };
 
 // 儲存對戰組別
@@ -876,8 +916,10 @@ window.saveMatchups = async (n) => {
   updateMatchup(n);
   const msg = document.getElementById("results-msg");
   try {
+    // 轉成物件格式儲存（Firestore 不支援巢狀陣列）
+    const muToSave = matchupData[n].map(pair => ({ a: pair[0]||"", b: pair[1]||"" }));
     await updateDoc(doc(db, "results", String(n)), {
-      matchups:  matchupData[n],
+      matchups:  muToSave,
       updatedAt: serverTimestamp()
     });
     msg.className   = "alert alert-success";
