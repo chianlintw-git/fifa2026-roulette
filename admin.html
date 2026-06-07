@@ -172,6 +172,25 @@
         </div>
       </div>
       <div id="mode-msg" style="display:none; margin-top:10px"></div>
+
+      <!-- Reset 區塊 -->
+      <div style="margin-top:16px; padding-top:16px; border-top:1px solid var(--border)">
+        <div class="card-title" style="margin-bottom:8px">&#x1F504; 重新開始（Reset）</div>
+        <div style="background:var(--bg2); border-radius:var(--radius); padding:10px 14px; font-size:12px; color:var(--text-sub); line-height:1.8; margin-bottom:12px">
+          &#x26A0; Reset 會清除：選隊、積分、比賽結果、封盤記錄，封盤時間重設。<br>
+          &#x1F9EA; <strong>試用模式 Reset</strong>：清除 picks_trial、scores_trial，保留正式資料。<br>
+          &#x1F7E2; <strong>正式模式 Reset</strong>：清除 picks、scores，保留試用資料。
+        </div>
+        <div style="display:flex; gap:10px; flex-wrap:wrap">
+          <button class="btn btn-outline" onclick="doReset('trial')" style="border-color:#BA7517;color:#BA7517">
+            &#x1F9EA; 試用模式 Reset
+          </button>
+          <button class="btn btn-primary" onclick="doReset('live')">
+            &#x1F7E2; 正式模式 Reset
+          </button>
+        </div>
+        <div id="reset-msg" style="display:none; margin-top:10px"></div>
+      </div>
     </div>
   </div>
 
@@ -1083,6 +1102,75 @@ window.saveResults = async (n) => {
   } catch(e) {
     msg.className   = "alert alert-danger";
     msg.textContent = "❌ 儲存失敗：" + e.message;
+    msg.style.display = "block";
+  }
+};
+
+// ─── Reset 並切換模式 ────────────────────────────────
+window.doReset = async (targetMode) => {
+  const msg       = document.getElementById("reset-msg");
+  const modeLabel = targetMode === "live" ? "正式模式" : "試用模式";
+  const clearCol  = targetMode === "live" ? "picks / scores（正式）" : "picks_trial / scores_trial（試用）";
+
+  if (!confirm(
+    "確定要執行【" + modeLabel + " Reset】？\n\n" +
+    "此操作將清除：\n" +
+    "・" + clearCol + "\n" +
+    "・results（所有比賽結果）\n" +
+    "・logs（封盤記錄）\n" +
+    "・score_logs（積分記錄）\n" +
+    "・rounds（封盤時間重設）\n\n" +
+    "此操作無法復原！"
+  )) return;
+
+  msg.className   = "alert alert-info";
+  msg.textContent = "Reset 執行中，請稍候...";
+  msg.style.display = "block";
+
+  try {
+    // 1. 清除目標模式的選隊和積分
+    const picksCol   = targetMode === "live" ? "picks"  : "picks_trial";
+    const scoreCol   = targetMode === "live" ? "scores" : "scores_trial";
+    const batch1     = writeBatch(db);
+    const picksSnap  = await getDocs(collection(db, picksCol));
+    picksSnap.forEach(d => batch1.delete(d.ref));
+    const scoresSnap = await getDocs(collection(db, scoreCol));
+    scoresSnap.forEach(d => batch1.delete(d.ref));
+    await batch1.commit();
+
+    // 2. 重設 results
+    const batch2 = writeBatch(db);
+    for (let i = 0; i <= 5; i++) {
+      batch2.set(doc(db, "results", String(i)), { round:i, advancedTeams:[], matchups:[], updatedAt:null });
+    }
+    await batch2.commit();
+
+    // 3. 清除 logs 和 score_logs
+    const batch3   = writeBatch(db);
+    const logsSnap = await getDocs(collection(db, "logs"));
+    logsSnap.forEach(d => batch3.delete(d.ref));
+    const slSnap   = await getDocs(collection(db, "score_logs"));
+    slSnap.forEach(d => batch3.delete(d.ref));
+    await batch3.commit();
+
+    // 4. 重設 rounds 封盤時間
+    const batch4  = writeBatch(db);
+    const rlabels = ["小組賽","32強淘汰賽","16強淘汰賽","8強淘汰賽","4強淘汰賽","冠軍決賽"];
+    for (let i = 0; i <= 5; i++) {
+      batch4.set(doc(db, "rounds", String(i)), {
+        round:i, label:rlabels[i], status:"open",
+        dueDate: new Date("2026-12-31T23:59:59+08:00"), multiplier:i===0?0:i
+      });
+    }
+    await batch4.commit();
+
+    msg.className   = "alert alert-success";
+    msg.textContent = "✓ " + modeLabel + " Reset 完成！" + clearCol + " 及比賽進度已清除，可重新開始。";
+    msg.style.display = "block";
+    setTimeout(() => { msg.style.display = "none"; }, 4000);
+  } catch(e) {
+    msg.className   = "alert alert-danger";
+    msg.textContent = "❌ Reset 失敗：" + e.message;
     msg.style.display = "block";
   }
 };
