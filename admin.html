@@ -935,17 +935,54 @@ window.saveMatchups = async (n) => {
 
 // 儲存晉級結果
 window.saveResults = async (n) => {
-  const msg      = document.getElementById("results-msg");
+  const msg = document.getElementById("results-msg");
   const advanced = [...(advancedSets[n] || [])];
   try {
+    // 1. 儲存晉級結果
     await updateDoc(doc(db, "results", String(n)), {
       advancedTeams: advanced,
       updatedAt:     serverTimestamp()
     });
+
+    // 2. 自動產出封盤記錄
+    const sysSnap  = await getDoc(doc(db, "settings", "system"));
+    const sysMode  = sysSnap.exists() ? (sysSnap.data().mode || "trial") : "trial";
+    const picksCol = sysMode === "trial" ? "picks_trial" : "picks";
+    const usersSnap = await getDocs(collection(db, "users"));
+    const users     = [];
+    usersSnap.forEach(d => {
+      if (d.id !== "_schema" && d.data().isApproved) users.push({ id: d.id, ...d.data() });
+    });
+    const sealedAt = new Date();
+    const batch    = writeBatch(db);
+    for (const u of users) {
+      const uid      = u.id;
+      const pickSnap = await getDoc(doc(db, picksCol, `${uid}_${n}`));
+      const pickData = pickSnap.exists() ? pickSnap.data() : null;
+      const selected = pickData?.selectedTeams || [];
+      const teamNames= selected.map(id => {
+        const t = TEAMS.find(t => t.teamId === id);
+        return t ? t.nameCht : id;
+      });
+      batch.set(doc(db, "logs", `${n}_${uid}`), {
+        round:         n,
+        uid:           uid,
+        nickname:      u.nickname  || "",
+        email:         u.email     || "",
+        userType:      u.userType  || "player",
+        selectedTeams: selected,
+        teamNames:     teamNames,
+        submittedAt:   pickData?.submittedAt || null,
+        sealedAt:      sealedAt,
+        mode:          sysMode
+      });
+    }
+    await batch.commit();
+
     msg.className   = "alert alert-success";
-    msg.textContent = `✓ 第 ${n} 輪晉級結果已儲存（${advanced.length} 隊）！`;
+    msg.textContent = `✓ 第 ${n} 輪晉級結果已儲存（${advanced.length} 隊），封盤記錄已同步產出！`;
     msg.style.display = "block";
-    setTimeout(() => msg.style.display = "none", 3000);
+    setTimeout(() => msg.style.display = "none", 4000);
   } catch(e) {
     msg.className   = "alert alert-danger";
     msg.textContent = "❌ 儲存失敗：" + e.message;
