@@ -26,8 +26,7 @@
   <div class="navbar-nav">
     <span class="navbar-user" id="nav-nickname"></span>
     <a href="main.html" class="active"><span>🏆</span> 排行榜</a>
-    <a href="picks-view.html"><span>🎯</span> 命中率</a>
-    <a href="pick.html"><span>🎯</span> 選隊/戰績</a>
+    <a href="pick.html"><span>🎯</span> 選隊</a>
     <a href="profile.html"><span>👤</span> 設定</a>
     <a href="admin.html" id="nav-admin" style="display:none"><span>⚙️</span> 管理</a>
     <a href="#" onclick="doLogout()"><span>🚪</span> 登出</a>
@@ -111,7 +110,8 @@
 <script type="module">
 import { auth, db } from "./js/firebase-config.js";
 import { onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
-import { collection, getDocs, doc, getDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { TEAMS } from "./js/teams-data.js";
+import { collection, getDocs, doc, getDoc, setDoc, writeBatch, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
 let currentUser = null;
 let allRows     = [];
@@ -128,10 +128,74 @@ onAuthStateChanged(auth, async (user) => {
   document.getElementById("nav-nickname").textContent = currentUser.nickname;
   if (currentUser.isAdmin) document.getElementById("nav-admin").style.display = "inline-flex";
   await loadMode();
+  autoSealCheck();
   loadScores();
 });
 
 window.doLogout = async () => { await signOut(auth); window.location.href = "index.html"; };
+
+// ─── 自動封盤記錄檢查 ────────────────────────────────
+async function autoSealCheck() {
+  try {
+    const sysSnap  = await getDoc(doc(db, "settings", "system"));
+    const sysMode  = sysSnap.exists() ? (sysSnap.data().mode || "trial") : "trial";
+    const picksCol = sysMode === "trial" ? "picks_trial" : "picks";
+    const now      = new Date();
+
+    // 讀取各輪封盤狀態
+    const roundsSnap = await getDocs(collection(db, "rounds"));
+    const rounds     = [];
+    roundsSnap.forEach(d => rounds.push(d.data()));
+
+    for (const r of rounds) {
+      const due    = r.dueDate?.toDate ? r.dueDate.toDate() : new Date(r.dueDate || 0);
+      const sealed = now >= due || r.status === "close";
+      if (!sealed) continue;
+
+      // 檢查此輪是否已有封盤記錄
+      const n          = r.round;
+      const logsSnap   = await getDocs(collection(db, "logs"));
+      const hasLog     = logsSnap.docs.some(d => d.data().round === n);
+      if (hasLog) continue;
+
+      // 尚無封盤記錄，自動產出
+      const usersSnap = await getDocs(collection(db, "users"));
+      const users     = [];
+      usersSnap.forEach(d => {
+        if (d.id !== "_schema" && d.data().isApproved) users.push({ id: d.id, ...d.data() });
+      });
+
+      const sealedAt = new Date();
+      const batch    = writeBatch(db);
+      for (const u of users) {
+        const uid      = u.id;
+        const pickSnap = await getDoc(doc(db, picksCol, `${uid}_${n}`));
+        const pickData = pickSnap.exists() ? pickSnap.data() : null;
+        const selected = pickData?.selectedTeams || [];
+        const teamNames = selected.map(id => {
+          const t = TEAMS.find(t => t.teamId === id);
+          return t ? t.nameCht : id;
+        });
+        batch.set(doc(db, "logs", `${n}_${uid}`), {
+          round:         n,
+          uid:           uid,
+          nickname:      u.nickname  || "",
+          email:         u.email     || "",
+          userType:      u.userType  || "player",
+          selectedTeams: selected,
+          teamNames:     teamNames,
+          submittedAt:   pickData?.submittedAt || null,
+          sealedAt:      sealedAt,
+          mode:          sysMode
+        });
+      }
+      await batch.commit();
+      console.log(`[autoSealCheck] 第 ${n} 輪封盤記錄已自動產出`);
+    }
+  } catch(e) {
+    console.warn("[autoSealCheck] 錯誤：", e.message);
+  }
+}
 
 // ─── 讀取系統模式 ─────────────────────────────────────
 async function loadMode() {
