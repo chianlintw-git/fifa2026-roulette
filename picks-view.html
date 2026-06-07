@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>選隊結果 — 2026世界盃足球輪盤盟主賽</title>
+  <title>命中率 — 2026世界盃足球輪盤盟主賽</title>
   <link rel="stylesheet" href="css/style.css">
   <style>
     .round-tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px}
@@ -34,7 +34,7 @@
   <div class="navbar-nav">
     <span class="navbar-user" id="nav-nickname"></span>
     <a href="main.html">&#x1F3C6; 排行榜</a>
-    <a href="picks-view.html" class="active">&#x1F441; 選隊結果</a>
+    <a href="picks-view.html" class="active">&#x1F3AF; 命中率</a>
     <a href="pick.html">&#x1F3AF; 選隊/戰績</a>
     <a href="profile.html">&#x1F464; 設定</a>
     <a href="admin.html" id="nav-admin" style="display:none">&#x2699;&#xFE0F; 管理</a>
@@ -44,8 +44,8 @@
 <div class="container">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
     <div>
-      <h2 style="font-size:17px;font-weight:500">&#x1F441; 選隊結果</h2>
-      <p style="font-size:12px;color:var(--text-sub);margin-top:2px">封盤後顯示各輪參賽者選隊內容</p>
+      <h2 style="font-size:17px;font-weight:500">&#x1F3AF; 命中率</h2>
+      <p style="font-size:12px;color:var(--text-sub);margin-top:2px">封盤後顯示各輪參賽者選隊命中率</p>
     </div>
     <button class="btn btn-outline btn-sm" onclick="loadAll()">&#x1F504; 重新整理</button>
   </div>
@@ -152,7 +152,7 @@ function renderRound(n) {
     + "</div><div style='overflow-x:auto'><table class='picks-table'><thead><tr>"
     + "<th style='width:90px'>暱稱</th>"
     + "<th style='min-width:60px;text-align:center'>選隊數</th>"
-    + (hasResult ? "<th style='min-width:60px;text-align:center'>命中</th>" : "")
+    + (hasResult ? "<th style='min-width:60px;text-align:center'>命中</th><th style='min-width:70px;text-align:center'>命中率</th>" : "")
     + "<th>選擇隊伍</th></tr></thead><tbody>";
   sorted.forEach(log => {
     const isSelf   = log.uid === currentUser.uid;
@@ -165,9 +165,11 @@ function renderRound(n) {
       + "</td>"
       + "<td style='text-align:center'>"+(selected.size>0?selected.size:"—")+"</td>";
     if (hasResult) {
+      const hitPct = selected.size > 0 ? Math.round(hitCount / (n===0?32:matchups.length) * 100) : null;
       html += "<td style='text-align:center'>"
         + (selected.size>0 ? "<span class='stat-pill stat-hit'>"+hitCount+"</span>" : "—")
-        + "</td>";
+        + "</td>"
+        + "<td style='text-align:center;font-weight:500;color:var(--primary)'>" + (hitPct!==null ? hitPct+"%" : "—") + "</td>";
     }
     html += "<td><div class='team-tags'>";
     if (selected.size === 0) {

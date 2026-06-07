@@ -103,8 +103,8 @@
   <div class="navbar-nav">
     <span class="navbar-user" id="nav-nickname"></span>
     <a href="main.html">🏆 排行榜</a>
-    <a href="picks-view.html">👁 選隊結果</a>
-    <a href="pick.html">🎯 選隊/戰績</a>
+    <a href="picks-view.html">&#x1F3AF; 命中率</a>
+    <a href="pick.html">🎯 選隊</a>
     <a href="profile.html">👤 設定</a>
     <a href="admin.html" id="nav-admin" class="active">⚙️ 管理</a>
     <a href="#" onclick="doLogout()">🚪 登出</a>
@@ -585,10 +585,7 @@ async function loadResultContent(n) {
   const resultData = resultSnap.exists() ? resultSnap.data() : { advancedTeams:[], matchups:[] };
 
   advancedSets[n] = new Set(resultData.advancedTeams || []);
-  // 相容物件格式 {a,b} 和陣列格式 [a,b]
-  matchupData[n]  = (resultData.matchups || []).map(m =>
-    Array.isArray(m) ? m : [m.a || '', m.b || '']
-  );
+  matchupData[n]  = resultData.matchups || [];
 
   document.getElementById("results-loading").style.display = "none";
   document.getElementById("results-content").style.display = "block";
@@ -879,10 +876,8 @@ window.saveMatchups = async (n) => {
   updateMatchup(n);
   const msg = document.getElementById("results-msg");
   try {
-    // 轉成物件格式儲存（Firestore 不支援巢狀陣列）
-    const muToSave = matchupData[n].map(pair => ({ a: pair[0]||"", b: pair[1]||"" }));
     await updateDoc(doc(db, "results", String(n)), {
-      matchups:  muToSave,
+      matchups:  matchupData[n],
       updatedAt: serverTimestamp()
     });
     msg.className   = "alert alert-success";
