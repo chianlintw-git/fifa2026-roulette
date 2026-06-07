@@ -226,14 +226,12 @@ async function loadScores() {
     const scoresMap  = {};
     scoresSnap.forEach(d => { scoresMap[d.id] = d.data(); });
 
-    console.log("[scores] scoreCol=", scoreCol, "scoresMap keys=", Object.keys(scoresMap).slice(0,3));
     allRows = [];
     usersSnap.forEach(d => {
       const u = d.data();
       if (d.id === "_schema" || !u.isApproved) return;
       const lookupId = u.uid || d.id;
       const s = scoresMap[lookupId] || {};
-      console.log("[scores]", u.nickname, "lookupId=", lookupId, "found=", !!scoresMap[lookupId], "total=", s.total);
       allRows.push({
         uid: u.uid || d.id, nickname: u.nickname,
         userType: u.userType || "player",
@@ -284,12 +282,12 @@ function renderTable() {
         <td style="text-align:center" class="${rankClass}">${rankIcon}</td>
         <td>${r.nickname}${trialBadge}${isSelf?`<span style="font-size:10px;color:var(--primary);margin-left:4px">（我）</span>`:""}</td>
         <td style="text-align:right;font-weight:500;color:var(--primary)">${r.total}</td>
-        <td style="text-align:right;color:var(--text-sub)">${r.round0||"—"}</td>
-        <td style="text-align:right;color:var(--text-sub)">${r.round1||"—"}</td>
-        <td style="text-align:right;color:var(--text-sub)">${r.round2||"—"}</td>
-        <td style="text-align:right;color:var(--text-sub)">${r.round3||"—"}</td>
-        <td style="text-align:right;color:var(--text-sub)">${r.round4||"—"}</td>
-        <td style="text-align:right;color:var(--text-sub)">${r.round5||"—"}</td>
+        <td style="text-align:right;color:var(--text-sub)">${r.round0 != null ? r.round0 : "—"}</td>
+        <td style="text-align:right;color:var(--text-sub)">${r.round1 != null ? r.round1 : "—"}</td>
+        <td style="text-align:right;color:var(--text-sub)">${r.round2 != null ? r.round2 : "—"}</td>
+        <td style="text-align:right;color:var(--text-sub)">${r.round3 != null ? r.round3 : "—"}</td>
+        <td style="text-align:right;color:var(--text-sub)">${r.round4 != null ? r.round4 : "—"}</td>
+        <td style="text-align:right;color:var(--text-sub)">${r.round5 != null ? r.round5 : "—"}</td>
       </tr>`;
   });
   document.getElementById("loading").style.display    = "none";
