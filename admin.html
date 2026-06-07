@@ -1019,7 +1019,11 @@ window.saveResults = async (n) => {
     msg.textContent = `計算第 ${n} 輪積分中...`;
     msg.style.display = "block";
 
-    const advancedSet = new Set(advanced);
+    // 從 Firestore 重新讀取已儲存的晉級隊伍（避免用畫面狀態）
+    const savedResultSnap = await getDoc(doc(db, "results", String(n)));
+    const savedAdvanced   = savedResultSnap.exists() ? (savedResultSnap.data().advancedTeams || []) : advanced;
+    const advancedSet = new Set(savedAdvanced);
+    console.log("[calcScore] round=", n, "advancedSet size=", advancedSet.size, "teams=", [...advancedSet]);
     const scoreCol    = sysMode === "trial" ? "scores_trial" : "scores";
     const scoreBatch  = writeBatch(db);
     let   calcCount   = 0;
