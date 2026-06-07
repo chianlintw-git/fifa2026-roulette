@@ -226,24 +226,30 @@ async function loadScores() {
     const scoresMap  = {};
     scoresSnap.forEach(d => { scoresMap[d.id] = d.data(); });
 
+    // 讀取各輪選隊記錄，判斷哪些輪次有選隊
+    const picksCol   = sysMode === "trial" ? "picks_trial" : "picks";
+    const picksSnap  = await getDocs(collection(db, picksCol));
+    const picksMap   = {};  // { uid_round: true }
+    picksSnap.forEach(d => { picksMap[d.id] = (d.data().selectedTeams || []).length > 0; });
+
     allRows = [];
     usersSnap.forEach(d => {
       const u = d.data();
       if (d.id === "_schema" || !u.isApproved) return;
-      const lookupId = u.uid || d.id;
-      const s        = scoresMap[lookupId];
-      const hasScore = !!s;
-      console.log("[row]", u.nickname, "hasScore=", hasScore, "s=", JSON.stringify(s));
+      const uid      = u.uid || d.id;
+      const s        = scoresMap[uid] || {};
+      const hasPicks = (round) => !!picksMap[uid + "_" + round];
       allRows.push({
-        uid: u.uid || d.id, nickname: u.nickname,
+        uid, nickname: u.nickname,
         userType: u.userType || "player",
-        total:  hasScore ? (s.total  ?? 0) : null,
-        round0: hasScore ? (s.round0 ?? null) : null,
-        round1: hasScore ? (s.round1 ?? null) : null,
-        round2: hasScore ? (s.round2 ?? null) : null,
-        round3: hasScore ? (s.round3 ?? null) : null,
-        round4: hasScore ? (s.round4 ?? null) : null,
-        round5: hasScore ? (s.round5 ?? null) : null,
+        // 有選隊才顯示積分，沒選隊顯示 null（→ "—"）
+        total:  Object.keys(s).length > 0 ? (s.total  ?? 0) : null,
+        round0: hasPicks(0) ? (s.round0 ?? 0) : null,
+        round1: hasPicks(1) ? (s.round1 ?? 0) : null,
+        round2: hasPicks(2) ? (s.round2 ?? 0) : null,
+        round3: hasPicks(3) ? (s.round3 ?? 0) : null,
+        round4: hasPicks(4) ? (s.round4 ?? 0) : null,
+        round5: hasPicks(5) ? (s.round5 ?? 0) : null,
       });
     });
 
@@ -290,7 +296,7 @@ function renderTable() {
       <tr style="${isSelf?"background:var(--primary-light);":""}">
         <td style="text-align:center" class="${rankClass}">${rankIcon}</td>
         <td>${r.nickname}${trialBadge}${isSelf?`<span style="font-size:10px;color:var(--primary);margin-left:4px">（我）</span>`:""}</td>
-        <td style="text-align:right;font-weight:500;color:var(--primary)">${r.total}</td>
+        <td style="text-align:right;font-weight:500;color:var(--primary)">${r.total != null ? r.total : "—"}</td>
         <td style="text-align:right;color:var(--text-sub)">${r.round0 != null ? r.round0 : "—"}</td>
         <td style="text-align:right;color:var(--text-sub)">${r.round1 != null ? r.round1 : "—"}</td>
         <td style="text-align:right;color:var(--text-sub)">${r.round2 != null ? r.round2 : "—"}</td>
