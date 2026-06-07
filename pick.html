@@ -80,7 +80,7 @@
     </div>
     <span class="save-status" id="save-status"></span>
   </div>
-  <button class="btn btn-primary" id="btn-save" onclick="savePicks()">&#x2713; 確定送出</button>
+  <button class="btn btn-primary" id="btn-save" onclick="savePicks()">✓ 確定送出</button>
 </div>
 <script type="module">
 import { auth, db } from "./js/firebase-config.js";
@@ -382,7 +382,7 @@ window.savePicks = async () => {
     });
     setStatus("儲存成功！" + (sysMode==="trial"?" （試用模式）":""),"ok");
   } catch(e) { setStatus("儲存失敗：" + e.message,"err"); }
-  btn.disabled = false; btn.textContent = "&#x2713; 確定送出";
+  btn.disabled = false; btn.textContent = "✓ 確定送出";
 };
 
 function setStatus(msg, type) {
