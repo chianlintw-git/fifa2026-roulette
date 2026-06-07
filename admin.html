@@ -560,20 +560,44 @@ async function loadResultRoundTabs() {
   const labels = ["小組賽","32強","16強","8強","4強","決賽"];
   const wrap   = document.getElementById("result-round-tabs");
   wrap.innerHTML = "";
+
+  // 讀取各輪晉級結果，判斷哪些輪已完成
+  const doneRounds = new Set();
   for (let i = 0; i <= 5; i++) {
+    const s = await getDoc(doc(db, "results", String(i)));
+    if (s.exists() && (s.data().advancedTeams || []).length > 0) doneRounds.add(i);
+  }
+
+  // 找第一個尚未設定的輪次，作為 default
+  let defaultRound = 0;
+  for (let i = 0; i <= 5; i++) {
+    if (!doneRounds.has(i)) { defaultRound = i; break; }
+  }
+  currentResultRound = defaultRound;
+
+  for (let i = 0; i <= 5; i++) {
+    const isDone = doneRounds.has(i);
     const btn = document.createElement("div");
-    btn.className = `admin-tab ${i === 0 ? "active":""}`;
-    btn.textContent = `第${i}輪 ${labels[i]}`;
+    btn.className = `admin-tab ${i === defaultRound ? "active":""}`;
+    btn.textContent = `第${i}輪 ${labels[i]}` + (isDone ? " ✓" : "");
+    if (isDone) btn.style.cssText += ";border-color:var(--teal);color:" + (i === defaultRound ? "#fff" : "var(--teal)");
     btn.onclick = () => {
       document.querySelectorAll("#result-round-tabs .admin-tab")
-        .forEach(b => b.classList.remove("active"));
+        .forEach(b => {
+          b.classList.remove("active");
+          // 重設顏色
+          const round = parseInt(b.textContent.match(/\d+/)[0]);
+          if (doneRounds.has(round)) b.style.cssText = "border-color:var(--teal);color:var(--teal)";
+          else b.style.cssText = "";
+        });
       btn.classList.add("active");
+      if (isDone) btn.style.cssText = "border-color:var(--teal);color:#fff;background:var(--teal)";
       currentResultRound = i;
       loadResultContent(i);
     };
     wrap.appendChild(btn);
   }
-  loadResultContent(0);
+  loadResultContent(defaultRound);
   } catch(e) {
     document.getElementById("results-loading").innerHTML =
       `<div class="alert alert-danger">❌ 比賽結果載入失敗：${e.message}</div>`;
