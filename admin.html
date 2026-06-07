@@ -1017,10 +1017,68 @@ window.saveResults = async (n) => {
     }
     await batch.commit();
 
-    msg.className   = "alert alert-success";
-    msg.textContent = `✓ 第 ${n} 輪晉級結果已儲存（${advanced.length} 隊），封盤記錄已同步產出！`;
+    // 3. 自動計算積分
+    msg.className   = "alert alert-info";
+    msg.textContent = `計算第 ${n} 輪積分中...`;
     msg.style.display = "block";
-    setTimeout(() => msg.style.display = "none", 4000);
+
+    const advancedSet = new Set(advanced);
+    const scoreCol    = sysMode === "trial" ? "scores_trial" : "scores";
+    const scoreBatch  = writeBatch(db);
+    let   calcCount   = 0;
+
+    for (const u of users) {
+      const uid      = u.id;
+      const pickSnap2= await getDoc(doc(db, picksCol, `${uid}_${n}`));
+      const picks    = pickSnap2.exists() ? (pickSnap2.data().selectedTeams || []) : [];
+      let   roundScore = 0;
+      picks.forEach(teamId => {
+        if (!advancedSet.has(teamId)) return;
+        const team = TEAMS.find(t => t.teamId === teamId);
+        if (!team) return;
+        roundScore += n === 0 ? 1 : team.weighting * n;
+      });
+      const scoreSnap = await getDoc(doc(db, scoreCol, uid));
+      const existing  = scoreSnap.exists() ? scoreSnap.data() : {};
+      const updated   = {
+        uid,
+        round0: existing.round0 || 0,
+        round1: existing.round1 || 0,
+        round2: existing.round2 || 0,
+        round3: existing.round3 || 0,
+        round4: existing.round4 || 0,
+        round5: existing.round5 || 0,
+        [`round${n}`]: roundScore,
+        lastCalcAt: serverTimestamp()
+      };
+      updated.total = updated.round0 + updated.round1 + updated.round2 +
+                      updated.round3 + updated.round4 + updated.round5;
+      scoreBatch.set(doc(db, scoreCol, uid), updated);
+      calcCount++;
+    }
+    await scoreBatch.commit();
+
+    // 同步寫入 score_logs
+    const calcTime  = new Date();
+    const logBatch2 = writeBatch(db);
+    const allScores = await getDocs(collection(db, scoreCol));
+    allScores.forEach(d => {
+      const s = d.data();
+      const u = users.find(u => u.id === d.id) || {};
+      logBatch2.set(doc(db, "score_logs", `${d.id}_round${n}`), {
+        uid: d.id, nickname: u.nickname||"", email: u.email||"",
+        userType: u.userType||"player", calcRound: n,
+        round0:s.round0||0, round1:s.round1||0, round2:s.round2||0,
+        round3:s.round3||0, round4:s.round4||0, round5:s.round5||0,
+        total:s.total||0, calcAt:calcTime, mode:sysMode
+      });
+    });
+    await logBatch2.commit();
+
+    msg.className   = "alert alert-success";
+    msg.textContent = `✓ 第 ${n} 輪完成！晉級結果已儲存、封盤記錄已產出、積分已計算（${calcCount} 人）。`;
+    msg.style.display = "block";
+    setTimeout(() => msg.style.display = "none", 5000);
   } catch(e) {
     msg.className   = "alert alert-danger";
     msg.textContent = "❌ 儲存失敗：" + e.message;
