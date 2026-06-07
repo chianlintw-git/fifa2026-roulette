@@ -231,8 +231,9 @@ async function loadScores() {
       const u = d.data();
       if (d.id === "_schema" || !u.isApproved) return;
       const lookupId = u.uid || d.id;
-      const s        = scoresMap[lookupId];  // undefined 代表無積分記錄
+      const s        = scoresMap[lookupId];
       const hasScore = !!s;
+      console.log("[row]", u.nickname, "hasScore=", hasScore, "s=", JSON.stringify(s));
       allRows.push({
         uid: u.uid || d.id, nickname: u.nickname,
         userType: u.userType || "player",
