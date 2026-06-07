@@ -975,14 +975,7 @@ window.saveResults = async (n) => {
     const due       = roundData?.dueDate?.toDate ? roundData.dueDate.toDate() : new Date(roundData?.dueDate || 0);
     const isSealed  = new Date() >= due || roundData?.status === "close";
 
-    if (!isSealed) {
-      msg.className   = "alert alert-success";
-      msg.textContent = `✓ 第 ${n} 輪晉級結果已儲存（${advanced.length} 隊）。封盤前不產出封盤記錄。`;
-      msg.style.display = "block";
-      setTimeout(() => msg.style.display = "none", 3000);
-      return;
-    }
-
+    // 讀取系統模式和使用者（封盤記錄和積分計算都需要）
     const sysSnap  = await getDoc(doc(db, "settings", "system"));
     const sysMode  = sysSnap.exists() ? (sysSnap.data().mode || "trial") : "trial";
     const picksCol = sysMode === "trial" ? "picks_trial" : "picks";
@@ -991,33 +984,37 @@ window.saveResults = async (n) => {
     usersSnap.forEach(d => {
       if (d.id !== "_schema" && d.data().isApproved) users.push({ id: d.id, ...d.data() });
     });
-    const sealedAt = new Date();
-    const batch    = writeBatch(db);
-    for (const u of users) {
-      const uid      = u.id;
-      const pickSnap = await getDoc(doc(db, picksCol, `${uid}_${n}`));
-      const pickData = pickSnap.exists() ? pickSnap.data() : null;
-      const selected = pickData?.selectedTeams || [];
-      const teamNames= selected.map(id => {
-        const t = TEAMS.find(t => t.teamId === id);
-        return t ? t.nameCht : id;
-      });
-      batch.set(doc(db, "logs", `${n}_${uid}`), {
-        round:         n,
-        uid:           uid,
-        nickname:      u.nickname  || "",
-        email:         u.email     || "",
-        userType:      u.userType  || "player",
-        selectedTeams: selected,
-        teamNames:     teamNames,
-        submittedAt:   pickData?.submittedAt || null,
-        sealedAt:      sealedAt,
-        mode:          sysMode
-      });
-    }
-    await batch.commit();
 
-    // 3. 自動計算積分
+    // 2. 封盤後才產出封盤記錄
+    if (isSealed) {
+      const sealedAt = new Date();
+      const batch    = writeBatch(db);
+      for (const u of users) {
+        const uid      = u.id;
+        const pickSnap = await getDoc(doc(db, picksCol, `${uid}_${n}`));
+        const pickData = pickSnap.exists() ? pickSnap.data() : null;
+        const selected = pickData?.selectedTeams || [];
+        const teamNames= selected.map(id => {
+          const t = TEAMS.find(t => t.teamId === id);
+          return t ? t.nameCht : id;
+        });
+        batch.set(doc(db, "logs", `${n}_${uid}`), {
+          round:         n,
+          uid:           uid,
+          nickname:      u.nickname  || "",
+          email:         u.email     || "",
+          userType:      u.userType  || "player",
+          selectedTeams: selected,
+          teamNames:     teamNames,
+          submittedAt:   pickData?.submittedAt || null,
+          sealedAt:      sealedAt,
+          mode:          sysMode
+        });
+      }
+      await batch.commit();
+    }
+
+    // 3. 無論是否封盤，都自動計算積分
     msg.className   = "alert alert-info";
     msg.textContent = `計算第 ${n} 輪積分中...`;
     msg.style.display = "block";
@@ -1076,7 +1073,7 @@ window.saveResults = async (n) => {
     await logBatch2.commit();
 
     msg.className   = "alert alert-success";
-    msg.textContent = `✓ 第 ${n} 輪完成！晉級結果已儲存、封盤記錄已產出、積分已計算（${calcCount} 人）。`;
+    msg.textContent = `✓ 第 ${n} 輪完成！晉級結果已儲存、` + (isSealed ? "封盤記錄已產出、" : "（未封盤不產出封盤記錄）、") + `積分已計算（${calcCount} 人）。`;
     msg.style.display = "block";
     setTimeout(() => msg.style.display = "none", 5000);
   } catch(e) {
