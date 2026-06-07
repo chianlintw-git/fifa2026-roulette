@@ -969,7 +969,20 @@ window.saveResults = async (n) => {
       updatedAt:     serverTimestamp()
     });
 
-    // 2. 自動產出封盤記錄
+    // 2. 只有封盤後才產出封盤記錄
+    const roundSnap = await getDoc(doc(db, "rounds", String(n)));
+    const roundData = roundSnap.exists() ? roundSnap.data() : null;
+    const due       = roundData?.dueDate?.toDate ? roundData.dueDate.toDate() : new Date(roundData?.dueDate || 0);
+    const isSealed  = new Date() >= due || roundData?.status === "close";
+
+    if (!isSealed) {
+      msg.className   = "alert alert-success";
+      msg.textContent = `✓ 第 ${n} 輪晉級結果已儲存（${advanced.length} 隊）。封盤前不產出封盤記錄。`;
+      msg.style.display = "block";
+      setTimeout(() => msg.style.display = "none", 3000);
+      return;
+    }
+
     const sysSnap  = await getDoc(doc(db, "settings", "system"));
     const sysMode  = sysSnap.exists() ? (sysSnap.data().mode || "trial") : "trial";
     const picksCol = sysMode === "trial" ? "picks_trial" : "picks";
