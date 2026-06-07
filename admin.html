@@ -655,8 +655,9 @@ function updateResultFooter(n) {
     // 統計各組狀況
     let okGroups  = 0;
     let badGroups = [];
+    const set0 = advancedSets[0] || new Set();
     GROUPS.forEach(g => {
-      const cnt = TEAMS.filter(t => t.group === g).filter(t => advancedSets[0].has(t.teamId)).length;
+      const cnt = TEAMS.filter(t => t.group === g).filter(t => set0.has(t.teamId)).length;
       if (cnt >= 2 && cnt <= 3) okGroups++;
       else badGroups.push(`${g}(${cnt})`);
     });
